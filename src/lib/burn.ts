@@ -1,6 +1,6 @@
 import type { Sample } from "./types";
 
-export function burnRate(samples: Sample[]): number | null {
+export function burnRate(samples: Pick<Sample, "sampled_at" | "value">[]): number | null {
 	if (samples.length < 2) return null;
 	const sorted = [...samples].sort((a, b) => a.sampled_at - b.sampled_at);
 	const first = sorted[0];
