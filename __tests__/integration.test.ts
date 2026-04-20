@@ -32,4 +32,11 @@ describe("integration", () => {
 		const out = await runFixture("celebration.json");
 		expect(out).toContain("(◕‿◕)♡");
 	});
+
+	test("normal fixture renders in < 250ms", async () => {
+		const start = Date.now();
+		await runFixture("normal.json");
+		const elapsed = Date.now() - start;
+		expect(elapsed).toBeLessThan(250);
+	});
 });
