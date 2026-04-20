@@ -1,0 +1,7 @@
+{
+  "session_id": "fix-celeb",
+  "workspace": {"current_dir": "/home/axel/DEV/raphael-openup-app"},
+  "model": {"display_name": "Sonnet 4.6"},
+  "cost": {"total_cost_usd": 0.18, "total_duration_ms": 180000, "total_api_duration_ms": 120000},
+  "context_window": {"current_usage": {"input_tokens": 18000, "cache_read_input_tokens": 6000}, "used_percentage": 12, "context_window_size": 200000}
+}

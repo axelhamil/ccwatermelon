@@ -1,0 +1,7 @@
+{
+  "session_id": "fix-normal",
+  "workspace": {"current_dir": "/home/axel/DEV/raphael-openup-app"},
+  "model": {"display_name": "Opus 4.7"},
+  "cost": {"total_cost_usd": 3.42, "total_duration_ms": 1080000, "total_api_duration_ms": 900000, "total_lines_added": 142, "total_lines_removed": 38},
+  "context_window": {"current_usage": {"input_tokens": 100000, "cache_read_input_tokens": 42000}, "used_percentage": 65, "context_window_size": 200000}
+}
