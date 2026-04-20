@@ -25,6 +25,7 @@ async function main(): Promise<void> {
 
 	try {
 		const nowSec = Math.floor(Date.now() / 1000);
+		const minuteBucket = Math.floor(nowSec / 60) * 60;
 		const nowMs = Date.now();
 		const cwd = input.workspace.current_dir;
 		const dirName = basename(cwd);
@@ -54,10 +55,10 @@ async function main(): Promise<void> {
 		const fiveHourResetsAt = limits.five_hour?.resets_at ?? null;
 
 		// Record samples
-		history.record("cost", sessionCost, nowSec);
-		if (contextPct !== null) history.record("ctx_pct", contextPct, nowSec);
-		if (fiveHourPct !== null) history.record("5h_pct", fiveHourPct, nowSec);
-		if (tokensPerSec !== null) history.record("tps", tokensPerSec, nowSec);
+		history.record("cost", sessionCost, minuteBucket);
+		if (contextPct !== null) history.record("ctx_pct", contextPct, minuteBucket);
+		if (fiveHourPct !== null) history.record("5h_pct", fiveHourPct, minuteBucket);
+		if (tokensPerSec !== null) history.record("tps", tokensPerSec, minuteBucket);
 
 		// Read series
 		const costSeries = history.getSeries("cost", CONFIG.history.windowMinutes, nowSec);
