@@ -6,7 +6,7 @@ const base: StatuslineData = {
 	mood: { kind: "zen", face: "(=ᴥ=)~", label: null, color: "teal" },
 	git: { branch: "main", dirty: false, insertions: 0, deletions: 0 },
 	modelName: "Opus 4.7",
-	dirName: "openup-app",
+	dirName: "acme-web",
 	activeSessions: 1,
 	sessionCost: 1.23,
 	sessionDurationMs: 300_000,
@@ -30,6 +30,14 @@ const base: StatuslineData = {
 	etaCooling: false,
 	alertMode: false,
 	celebrationMode: false,
+	sessionName: null,
+	ccVersion: null,
+	outputStyle: null,
+	worktree: null,
+	linesAdded: 0,
+	linesRemoved: 0,
+	vimMode: null,
+	agentName: null,
 };
 
 function withWidth<T>(width: number | undefined, fn: () => T): T {
@@ -68,7 +76,7 @@ describe("render", () => {
 
 	test("ETA in alert mode", () => {
 		const out = withWidth(120, () => render({ ...base, alertMode: true, etaMinutes: 12 }));
-		expect(out).toContain("limite dans");
+		expect(out).toContain("limit in");
 		expect(out).toContain("12");
 	});
 
@@ -135,7 +143,7 @@ describe("gauge line", () => {
 		const out = stripAnsi(
 			render({ ...base, fiveHourPct: null, sevenDayPct: null, compactPct: null, contextPct: null }),
 		);
-		expect(out.split("\n")[2]).toContain("jauges indisponibles");
+		expect(out.split("\n")[2]).toContain("gauges unavailable");
 	});
 
 	test("session line no longer carries the quotas", () => {

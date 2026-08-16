@@ -1,17 +1,31 @@
 {
-  "name": "ccstatusline-godlike",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "start": "bun run src/index.ts",
-    "test": "bun test",
-    "lint": "biome check .",
-    "format": "biome format --write ."
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
-    "@types/bun": "latest",
-    "typescript": "^5.6.0"
-  }
+	"name": "ccstatusline-godlike",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"bin": {
+		"ccstatusline-godlike-config": "src/cli.ts"
+	},
+	"scripts": {
+		"start": "bun run src/index.ts",
+		"config": "bun run src/cli.ts",
+		"test": "bun test",
+		"lint": "biome check .",
+		"format": "biome format --write ."
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.4",
+		"@types/bun": "latest",
+		"typescript": "^5.6.0"
+	},
+	"dependencies": {
+		"zod": "^4.4.3"
+	},
+	"license": "MIT",
+	"description": "A fast, configurable Claude Code statusline: context, cost history and rate-limit gauges at a glance.",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/axelhamil/ccstatusline-godlike.git"
+	},
+	"keywords": ["claude-code", "statusline", "cli", "bun", "terminal"]
 }

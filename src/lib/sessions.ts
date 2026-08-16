@@ -15,8 +15,12 @@ export class SessionsStore {
 	private load(): SessionEntry[] {
 		try {
 			const raw = readFileSync(this.path, "utf-8");
-			return JSON.parse(raw);
-		} catch {
+			const parsed = JSON.parse(raw);
+			return Array.isArray(parsed) ? parsed : [];
+		} catch (err) {
+			if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+				console.error(`ccstatusline-godlike: sessions store unreadable, resetting — ${err}`);
+			}
 			return [];
 		}
 	}

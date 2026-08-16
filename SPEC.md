@@ -231,12 +231,12 @@ Perf regression test : run `bun test perf` after each change, fail if > 250 ms.
 - **Zero disruption** : current statusline at `~/.claude/scripts/statusline/` stays UNTOUCHED until explicit swap.
 - **Switch** : single line change in `~/.claude/settings.json` :
   ```json
-  "statusLine": { "type": "command", "command": "bun /home/axel/.claude/scripts/statusline-godlike/src/index.ts", "padding": 0 }
+  "statusLine": { "type": "command", "command": "bun ~/.claude/scripts/ccstatusline-godlike/src/index.ts", "padding": 0 }
   ```
 - **Rollback** : revert that one line to point back to old statusline.
 - **Error path** : ANY exception → fallback to minimal output `<dir> · <model>` (never crashes Claude Code UI).
 - **Empty data** : every lib returns sensible defaults on missing data (no git → `no-git`, no limits → no 5h segment, no history → no sparkline).
-- **WIP protection** : this design explicitly lists `raphael-openup-app` as the critical active project — no code anywhere that risks its integrity.
+- **WIP protection** : this design explicitly lists `acme-web` as the critical active project — no code anywhere that risks its integrity.
 
 ---
 
@@ -257,7 +257,7 @@ Stow symlinks it into `~/.claude/scripts/statusline-godlike/` and the whole thin
 - Multi-provider support
 - macOS Keychain
 - Presets system
-- Internationalization (Français-only labels)
+- Internationalization (labels hardcoded in French, per original design)
 - Cross-platform (Linux only, uses `tmux list-sessions` and `sqlite3`)
 
 ---
@@ -274,5 +274,5 @@ Implementation is complete when :
 6. p99 latency < 200 ms on real session JSON
 7. Running 10 consecutive times builds up 10 points in `history.db` and sparkline updates reactively
 8. Throwing an error in any lib results in fallback output (chaos test)
-9. User swaps `settings.json` to new statusline for 1 hour on `raphael-openup-app` without any regression or crash
+9. User swaps `settings.json` to new statusline for 1 hour on `acme-web` without any regression or crash
 10. User approves the visual result matches the validated final-design mockup

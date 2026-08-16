@@ -153,7 +153,7 @@ Update `~/.claude/settings.json`:
 {
   "statusLine": {
     "type": "command",
-    "command": "bun /home/axel/.claude/scripts/statusline-godlike/src/index.ts",
+    "command": "bun ~/.claude/scripts/statusline-godlike/src/index.ts",
     "padding": 0
   }
 }
@@ -1257,7 +1257,7 @@ const base: StatuslineData = {
 	mood: { kind: "zen", face: "(=ᴥ=)~", label: null, color: "teal", pulseFast: false },
 	git: { branch: "main", dirty: false, insertions: 0, deletions: 0 },
 	modelName: "Opus 4.7",
-	dirName: "openup-app",
+	dirName: "acme-web",
 	activeSessions: 1,
 	sessionCost: 1.23,
 	sessionDurationMs: 300_000,
@@ -1573,7 +1573,7 @@ main();
 ```bash
 echo '{
   "session_id": "smoke-1",
-  "workspace": {"current_dir": "/home/axel"},
+  "workspace": {"current_dir": "~"},
   "model": {"display_name": "Opus 4.7"},
   "cost": {"total_cost_usd": 1.5, "total_duration_ms": 300000},
   "context_window": {"used_percentage": 40, "context_window_size": 200000}
@@ -1602,7 +1602,7 @@ git commit -m "feat: wire up orchestrator with fallback"
 ```json
 {
   "session_id": "fix-normal",
-  "workspace": {"current_dir": "/home/axel/DEV/raphael-openup-app"},
+  "workspace": {"current_dir": "~/DEV/acme-web"},
   "model": {"display_name": "Opus 4.7"},
   "cost": {"total_cost_usd": 3.42, "total_duration_ms": 1080000, "total_api_duration_ms": 900000, "total_lines_added": 142, "total_lines_removed": 38},
   "context_window": {"current_usage": {"input_tokens": 100000, "cache_read_input_tokens": 42000}, "used_percentage": 71, "context_window_size": 200000}
@@ -1614,7 +1614,7 @@ git commit -m "feat: wire up orchestrator with fallback"
 ```json
 {
   "session_id": "fix-alert-ctx",
-  "workspace": {"current_dir": "/home/axel/DEV/raphael-openup-app"},
+  "workspace": {"current_dir": "~/DEV/acme-web"},
   "model": {"display_name": "Opus 4.7"},
   "cost": {"total_cost_usd": 8.9, "total_duration_ms": 2700000, "total_api_duration_ms": 2200000},
   "context_window": {"current_usage": {"input_tokens": 160000, "cache_read_input_tokens": 24000}, "used_percentage": 92, "context_window_size": 200000}
@@ -1626,7 +1626,7 @@ git commit -m "feat: wire up orchestrator with fallback"
 ```json
 {
   "session_id": "fix-alert-5h",
-  "workspace": {"current_dir": "/home/axel/DEV/raphael-openup-app"},
+  "workspace": {"current_dir": "~/DEV/acme-web"},
   "model": {"display_name": "Opus 4.7"},
   "cost": {"total_cost_usd": 5.5, "total_duration_ms": 3600000, "total_api_duration_ms": 3000000},
   "context_window": {"current_usage": {"input_tokens": 80000, "cache_read_input_tokens": 10000}, "used_percentage": 45, "context_window_size": 200000}
@@ -1638,7 +1638,7 @@ git commit -m "feat: wire up orchestrator with fallback"
 ```json
 {
   "session_id": "fix-celeb",
-  "workspace": {"current_dir": "/home/axel/DEV/raphael-openup-app"},
+  "workspace": {"current_dir": "~/DEV/acme-web"},
   "model": {"display_name": "Sonnet 4.6"},
   "cost": {"total_cost_usd": 0.18, "total_duration_ms": 180000, "total_api_duration_ms": 120000},
   "context_window": {"current_usage": {"input_tokens": 18000, "cache_read_input_tokens": 6000}, "used_percentage": 12, "context_window_size": 200000}
@@ -1749,7 +1749,7 @@ Replace the current line :
 ```json
 "statusLine": {
   "type": "command",
-  "command": "bun /home/axel/.claude/scripts/statusline/src/index.ts",
+  "command": "bun ~/.claude/scripts/statusline/src/index.ts",
   "padding": 0
 }
 ```
@@ -1759,14 +1759,14 @@ with :
 ```json
 "statusLine": {
   "type": "command",
-  "command": "bun /home/axel/.claude/scripts/statusline-godlike/src/index.ts",
+  "command": "bun ~/.claude/scripts/statusline-godlike/src/index.ts",
   "padding": 0
 }
 ```
 
 - [ ] **Step 3: Final verification in real Claude Code session**
 
-Open a new Claude Code terminal in `~/DEV/raphael-openup-app`. Statusline should show 2-line godlike format. Run a few commands to accumulate samples. Verify sparklines populate after 2-3 minutes. No regression on core work.
+Open a new Claude Code terminal in `~/DEV/acme-web`. Statusline should show 2-line godlike format. Run a few commands to accumulate samples. Verify sparklines populate after 2-3 minutes. No regression on core work.
 
 If anything looks wrong, rollback :
 
@@ -1796,7 +1796,7 @@ git tag v0.1.0 -m "First rollout — godlike statusline active"
 - [ ] p99 < 250 ms (target < 200 ms on p50)
 - [ ] 10 consecutive runs build up 10 points in `history.db`, sparkline updates reactively
 - [ ] Throwing an error in any lib results in fallback output (no Claude Code crash)
-- [ ] Swap `settings.json` to new statusline for 1 hour on `raphael-openup-app` without regression
+- [ ] Swap `settings.json` to new statusline for 1 hour on `acme-web` without regression
 - [ ] Visual matches validated final-design mockup
 
 ---

@@ -104,3 +104,19 @@ describe("gradientText", () => {
 		expect(codes.length).toBeGreaterThanOrEqual(4);
 	});
 });
+
+describe("formatCost hardening", () => {
+	test("caps absurd values instead of printing scientific notation", () => {
+		const out = formatCost(1e308);
+		expect(out).not.toContain("e+");
+		expect(out).toBe("$999999+");
+	});
+
+	test("never renders a negative cost", () => {
+		expect(formatCost(-42)).toBe("$0.00");
+	});
+
+	test("falls back to zero on NaN", () => {
+		expect(formatCost(Number.NaN)).toBe("$0.00");
+	});
+});

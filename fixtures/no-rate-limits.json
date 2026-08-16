@@ -1,0 +1,22 @@
+{
+	"session_id": "fix-no-rate-limits",
+	"workspace": {
+		"current_dir": "/home/dev/projects/acme-web"
+	},
+	"model": {
+		"display_name": "Opus 4.7"
+	},
+	"cost": {
+		"total_cost_usd": 1.1,
+		"total_duration_ms": 300000,
+		"total_api_duration_ms": 200000
+	},
+	"context_window": {
+		"current_usage": {
+			"input_tokens": 20000,
+			"cache_read_input_tokens": 5000
+		},
+		"used_percentage": 15,
+		"context_window_size": 200000
+	}
+}

@@ -15,10 +15,20 @@ export interface UsageLimit {
 export interface HookInput {
 	session_id: string;
 	version?: string;
-	workspace: { current_dir: string };
+	session_name?: string;
+	transcript_path?: string;
+	workspace: {
+		current_dir: string;
+		project_dir?: string;
+		added_dirs?: string[];
+		git_worktree?: string;
+	};
 	model: { display_name: string; id?: string };
 	effort?: { level?: string };
 	thinking?: { enabled?: boolean };
+	output_style?: { name?: string };
+	vim?: { mode?: string };
+	agent?: { name?: string };
 	rate_limits?: {
 		five_hour?: { used_percentage?: number; resets_at?: number | string | null };
 		seven_day?: { used_percentage?: number; resets_at?: number | string | null };
@@ -89,4 +99,13 @@ export interface StatuslineData {
 
 	alertMode: boolean;
 	celebrationMode: boolean;
+
+	sessionName: string | null;
+	ccVersion: string | null;
+	outputStyle: string | null;
+	worktree: string | null;
+	linesAdded: number;
+	linesRemoved: number;
+	vimMode: string | null;
+	agentName: string | null;
 }

@@ -1,4 +1,4 @@
-export const PALETTE = {
+const DEFAULT_PALETTE = {
 	text: [205, 214, 244],
 	subtext: [166, 173, 200],
 	dim: [108, 112, 134],
@@ -14,12 +14,24 @@ export const PALETTE = {
 	pink: [245, 194, 231],
 } as const;
 
-export type ColorName = keyof typeof PALETTE;
+export type ColorName = keyof typeof DEFAULT_PALETTE;
 export type Rgb = readonly [number, number, number];
 
+export const PALETTE: Record<ColorName, Rgb> = { ...DEFAULT_PALETTE };
+
+// Applies user config color overrides on top of the Catppuccin Mocha
+// defaults. Unknown keys are ignored (already rejected by zod upstream);
+// called once at startup, never on a per-render basis.
+export function applyPaletteOverrides(overrides: Record<string, Rgb>): void {
+	for (const key of Object.keys(DEFAULT_PALETTE) as ColorName[]) {
+		const override = overrides[key];
+		PALETTE[key] = override ?? DEFAULT_PALETTE[key];
+	}
+}
+
 export function color(text: string, name: ColorName): string {
-	const [r, g, b] = PALETTE[name];
-	return `\x1b[38;2;${r};${g};${b}m${text}\x1b[0m`;
+	const rgb = PALETTE[name];
+	return colorRgb(text, rgb);
 }
 
 export function colorRgb(text: string, rgb: Rgb): string {
@@ -38,21 +50,24 @@ export function lerpColor(t: number, a: Rgb, b: Rgb): Rgb {
 	];
 }
 
-const GRADIENT_STOPS: readonly Rgb[] = [
-	PALETTE.pink,
-	PALETTE.mauve,
-	PALETTE.lavender,
-	PALETTE.sky,
-	PALETTE.teal,
-	PALETTE.green,
-	PALETTE.yellow,
-	PALETTE.peach,
-];
+function gradientStops(): readonly Rgb[] {
+	return [
+		PALETTE.pink,
+		PALETTE.mauve,
+		PALETTE.lavender,
+		PALETTE.sky,
+		PALETTE.teal,
+		PALETTE.green,
+		PALETTE.yellow,
+		PALETTE.peach,
+	];
+}
 
 export function gradientText(text: string): string {
 	const chars = [...text];
 	const span = Math.max(1, chars.length - 1);
-	const last = GRADIENT_STOPS.length - 1;
+	const stops = gradientStops();
+	const last = stops.length - 1;
 
 	return chars
 		.map((ch, i) => {
@@ -60,21 +75,27 @@ export function gradientText(text: string): string {
 			const pos = (i / span) * last;
 			const from = Math.min(last, Math.floor(pos));
 			const to = Math.min(last, from + 1);
-			const a = GRADIENT_STOPS[from] ?? PALETTE.text;
-			const b = GRADIENT_STOPS[to] ?? PALETTE.text;
+			const a = stops[from] ?? PALETTE.text;
+			const b = stops[to] ?? PALETTE.text;
 			return colorRgb(ch, lerpColor(pos - from, a, b));
 		})
 		.join("");
 }
 
+// A statusline has no room for scientific notation: anything past six figures
+// is a broken payload, not a real bill, and must not blow the layout apart.
+const COST_DISPLAY_CEILING = 999_999;
+
 export function formatCost(usd: number): string {
-	if (usd === 0) return "$0.00";
-	if (usd < 10) return `$${usd.toFixed(2)}`;
-	return `$${usd.toFixed(1)}`;
+	const safe = Number.isFinite(usd) ? Math.min(Math.max(usd, 0), COST_DISPLAY_CEILING) : 0;
+	if (safe === 0) return "$0.00";
+	if (safe < 10) return `$${safe.toFixed(2)}`;
+	if (safe >= COST_DISPLAY_CEILING) return `$${COST_DISPLAY_CEILING}+`;
+	return `$${safe.toFixed(1)}`;
 }
 
 export function formatDuration(ms: number): string {
-	const totalSec = Math.floor(ms / 1000);
+	const totalSec = Number.isFinite(ms) ? Math.max(0, Math.floor(ms / 1000)) : 0;
 	const h = Math.floor(totalSec / 3600);
 	const m = Math.floor((totalSec % 3600) / 60);
 	const s = totalSec % 60;
@@ -84,11 +105,13 @@ export function formatDuration(ms: number): string {
 }
 
 export function formatTokens(n: number): string {
-	if (n < 1000) return `${n}`;
-	if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
-	return `${(n / 1_000_000).toFixed(1)}M`;
+	const safe = Number.isFinite(n) ? Math.max(0, n) : 0;
+	if (safe < 1000) return `${Math.round(safe)}`;
+	if (safe < 1_000_000) return `${Math.round(safe / 1000)}k`;
+	return `${(safe / 1_000_000).toFixed(1)}M`;
 }
 
 export function formatPct(n: number): string {
-	return `${Math.round(n)}%`;
+	const safe = Number.isFinite(n) ? n : 0;
+	return `${Math.round(safe)}%`;
 }

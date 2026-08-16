@@ -8,6 +8,13 @@ export class History {
 	constructor(path: string) {
 		mkdirSync(dirname(path), { recursive: true });
 		this.db = new Database(path);
+		// Several Claude Code sessions render concurrently against the same file,
+		// so the default rollback journal hands out "database is locked" and drops
+		// the whole statusline to its fallback line. WAL lets readers and the
+		// single writer coexist; busy_timeout absorbs the remaining write overlap.
+		this.db.exec("PRAGMA journal_mode = WAL");
+		this.db.exec("PRAGMA busy_timeout = 2000");
+		this.db.exec("PRAGMA synchronous = NORMAL");
 		this.db.exec(`
 			CREATE TABLE IF NOT EXISTS samples (
 				metric TEXT NOT NULL,

@@ -1,17 +1,35 @@
-import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-async function runFixture(name: string, width = 120): Promise<string> {
-	const fixture = readFileSync(join(import.meta.dir, "..", "fixtures", name), "utf-8");
+const dataDir = mkdtempSync(join(tmpdir(), "ccstatusline-data-"));
+const cacheDir = mkdtempSync(join(tmpdir(), "ccstatusline-cache-"));
+
+afterAll(() => {
+	rmSync(dataDir, { recursive: true, force: true });
+	rmSync(cacheDir, { recursive: true, force: true });
+});
+
+async function runPayload(payload: unknown, width = 120): Promise<string> {
 	const proc = Bun.spawn(["bun", "run", join(import.meta.dir, "..", "src", "index.ts")], {
-		stdin: new Blob([fixture]),
+		stdin: new Blob([JSON.stringify(payload)]),
 		stdout: "pipe",
-		env: { ...process.env, CCSTATUSLINE_WIDTH: String(width) },
+		env: {
+			...process.env,
+			CCSTATUSLINE_WIDTH: String(width),
+			CCSTATUSLINE_DATA_DIR: dataDir,
+			CCSTATUSLINE_CACHE_DIR: cacheDir,
+		},
 	});
 	const out = await new Response(proc.stdout).text();
 	await proc.exited;
 	return out;
+}
+
+async function runFixture(name: string, width = 120): Promise<string> {
+	const fixture = JSON.parse(readFileSync(join(import.meta.dir, "..", "fixtures", name), "utf-8"));
+	return runPayload(fixture, width);
 }
 
 describe("integration", () => {
@@ -45,6 +63,33 @@ describe("integration", () => {
 		const lines = out.split("\n").filter((l) => l.trim().length > 0);
 		expect(lines.length).toBeGreaterThanOrEqual(2);
 		expect(out).toContain("Sonnet 4.6");
+	});
+
+	test("payload without rate_limits never shows NaN% and still renders", async () => {
+		const out = await runFixture("no-rate-limits.json");
+		expect(out).not.toContain("NaN");
+		const lines = out.split("\n").filter((l) => l.trim().length > 0);
+		expect(lines.length).toBeGreaterThanOrEqual(2);
+	}, 8000);
+
+	test("project-local config disables a segment for the render", async () => {
+		const projectDir = mkdtempSync(join(tmpdir(), "ccstatusline-project-"));
+		writeFileSync(
+			join(projectDir, ".ccstatusline-godlike.jsonc"),
+			`{
+				// disable the tokens/s segment for this project
+				"segments": { "tps": { "enabled": false } }
+			}`,
+		);
+		const base = JSON.parse(
+			readFileSync(join(import.meta.dir, "..", "fixtures", "normal.json"), "utf-8"),
+		);
+		base.workspace.current_dir = projectDir;
+
+		const out = await runPayload(base);
+		expect(out).not.toContain("t/s");
+
+		rmSync(projectDir, { recursive: true, force: true });
 	});
 
 	test("normal fixture renders in < 250ms", async () => {

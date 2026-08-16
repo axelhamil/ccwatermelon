@@ -18,7 +18,8 @@ export async function getGitStatus(cwd: string): Promise<GitStatus | null> {
 		const deletions = delMatch?.[1] ? Number.parseInt(delMatch[1], 10) : 0;
 
 		return { branch, dirty, insertions, deletions };
-	} catch {
+	} catch (err) {
+		console.error(`ccstatusline-godlike: git status unavailable for ${cwd} — ${err}`);
 		return null;
 	}
 }

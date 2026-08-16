@@ -1,32 +1,32 @@
 {
-  "session_id": "fix-alert-ctx",
-  "workspace": {
-    "current_dir": "/home/axel/DEV/raphael-openup-app"
-  },
-  "model": {
-    "display_name": "Opus 4.7"
-  },
-  "cost": {
-    "total_cost_usd": 8.9,
-    "total_duration_ms": 2700000,
-    "total_api_duration_ms": 2200000
-  },
-  "context_window": {
-    "current_usage": {
-      "input_tokens": 141000,
-      "cache_read_input_tokens": 24000
-    },
-    "used_percentage": 90,
-    "context_window_size": 200000
-  },
-  "rate_limits": {
-    "five_hour": {
-      "used_percentage": 20,
-      "resets_at": null
-    },
-    "seven_day": {
-      "used_percentage": 23,
-      "resets_at": null
-    }
-  }
+	"session_id": "fix-alert-ctx",
+	"workspace": {
+		"current_dir": "/home/dev/projects/acme-web"
+	},
+	"model": {
+		"display_name": "Opus 4.7"
+	},
+	"cost": {
+		"total_cost_usd": 8.9,
+		"total_duration_ms": 2700000,
+		"total_api_duration_ms": 2200000
+	},
+	"context_window": {
+		"current_usage": {
+			"input_tokens": 141000,
+			"cache_read_input_tokens": 24000
+		},
+		"used_percentage": 90,
+		"context_window_size": 200000
+	},
+	"rate_limits": {
+		"five_hour": {
+			"used_percentage": 20,
+			"resets_at": null
+		},
+		"seven_day": {
+			"used_percentage": 23,
+			"resets_at": null
+		}
+	}
 }
