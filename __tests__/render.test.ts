@@ -41,16 +41,16 @@ const base: StatuslineData = {
 };
 
 function withWidth<T>(width: number | undefined, fn: () => T): T {
-	const prev = process.env.CCSTATUSLINE_WIDTH;
+	const prev = process.env.CCWATERMELON_WIDTH;
 	// biome-ignore lint/performance/noDelete: env var must be absent, not "undefined", to hit the fallback path
-	if (width === undefined) delete process.env.CCSTATUSLINE_WIDTH;
-	else process.env.CCSTATUSLINE_WIDTH = String(width);
+	if (width === undefined) delete process.env.CCWATERMELON_WIDTH;
+	else process.env.CCWATERMELON_WIDTH = String(width);
 	try {
 		return fn();
 	} finally {
 		// biome-ignore lint/performance/noDelete: env var must be absent, not "undefined", to hit the fallback path
-		if (prev === undefined) delete process.env.CCSTATUSLINE_WIDTH;
-		else process.env.CCSTATUSLINE_WIDTH = prev;
+		if (prev === undefined) delete process.env.CCWATERMELON_WIDTH;
+		else process.env.CCWATERMELON_WIDTH = prev;
 	}
 }
 

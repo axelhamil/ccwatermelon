@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "statusline-godlike",
+      "name": "ccwatermelon",
       "dependencies": {
         "zod": "^4.4.3",
       },

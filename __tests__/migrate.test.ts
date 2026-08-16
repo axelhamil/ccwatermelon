@@ -11,7 +11,7 @@ describe("migrateLegacyPaths", () => {
 	});
 
 	test("moves an old file to the new path, preserving content", () => {
-		const dir = mkdtempSync(join(tmpdir(), "ccstatusline-migrate-"));
+		const dir = mkdtempSync(join(tmpdir(), "ccwatermelon-migrate-"));
 		dirs.push(dir);
 		const from = join(dir, "old", "history.db");
 		const to = join(dir, "new", "history.db");
@@ -26,7 +26,7 @@ describe("migrateLegacyPaths", () => {
 	});
 
 	test("does nothing when the old file does not exist", () => {
-		const dir = mkdtempSync(join(tmpdir(), "ccstatusline-migrate-"));
+		const dir = mkdtempSync(join(tmpdir(), "ccwatermelon-migrate-"));
 		dirs.push(dir);
 		const from = join(dir, "missing.db");
 		const to = join(dir, "new.db");
@@ -35,7 +35,7 @@ describe("migrateLegacyPaths", () => {
 	});
 
 	test("does nothing when the new file already exists, never overwriting", () => {
-		const dir = mkdtempSync(join(tmpdir(), "ccstatusline-migrate-"));
+		const dir = mkdtempSync(join(tmpdir(), "ccwatermelon-migrate-"));
 		dirs.push(dir);
 		const from = join(dir, "old.db");
 		const to = join(dir, "new.db");

@@ -231,7 +231,7 @@ Perf regression test : run `bun test perf` after each change, fail if > 250 ms.
 - **Zero disruption** : current statusline at `~/.claude/scripts/statusline/` stays UNTOUCHED until explicit swap.
 - **Switch** : single line change in `~/.claude/settings.json` :
   ```json
-  "statusLine": { "type": "command", "command": "bun ~/.claude/scripts/ccstatusline-godlike/src/index.ts", "padding": 0 }
+  "statusLine": { "type": "command", "command": "bun ~/.claude/scripts/ccwatermelon/src/index.ts", "padding": 0 }
   ```
 - **Rollback** : revert that one line to point back to old statusline.
 - **Error path** : ANY exception → fallback to minimal output `<dir> · <model>` (never crashes Claude Code UI).

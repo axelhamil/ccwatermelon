@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+	PALETTE,
+	THEMES,
+	applyPaletteOverrides,
 	color,
 	colorRgb,
 	formatCost,
@@ -118,5 +121,33 @@ describe("formatCost hardening", () => {
 
 	test("falls back to zero on NaN", () => {
 		expect(formatCost(Number.NaN)).toBe("$0.00");
+	});
+});
+
+describe("themes", () => {
+	test("watermelon is the default palette", () => {
+		applyPaletteOverrides({});
+		expect(PALETTE.green).toEqual(THEMES.watermelon.green);
+		expect(PALETTE.red).toEqual(THEMES.watermelon.red);
+	});
+
+	test("mocha can be selected explicitly", () => {
+		applyPaletteOverrides({}, "mocha");
+		expect(PALETTE.green).toEqual(THEMES.mocha.green);
+		applyPaletteOverrides({});
+	});
+
+	test("user overrides win over the theme", () => {
+		applyPaletteOverrides({ green: [1, 2, 3] });
+		expect(PALETTE.green).toEqual([1, 2, 3]);
+		applyPaletteOverrides({});
+	});
+
+	test("healthy green and pressure red stay far apart in every theme", () => {
+		for (const theme of Object.values(THEMES)) {
+			const [gr] = theme.green;
+			const [rr] = theme.red;
+			expect(rr).toBeGreaterThan(gr);
+		}
 	});
 });

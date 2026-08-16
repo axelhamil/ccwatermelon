@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import type { ThemeName } from "./format";
 
 const RgbTupleSchema = z.tuple([
 	z.number().int().min(0).max(255),
@@ -19,7 +20,7 @@ const SegmentConfigSchema = z
 
 const ConfigFileSchema = z
 	.object({
-		theme: z.enum(["mocha"]).optional(),
+		theme: z.enum(["watermelon", "mocha"]).optional(),
 		thresholds: z
 			.object({
 				compactAlert: z.number().min(0).max(100).optional(),
@@ -39,7 +40,7 @@ const ConfigFileSchema = z
 export type ConfigFile = z.infer<typeof ConfigFileSchema>;
 
 export interface ResolvedConfig {
-	theme: "mocha";
+	theme: ThemeName;
 	thresholds: {
 		compactAlert: number;
 		fiveHourAlert: number;
@@ -57,7 +58,7 @@ export interface LoadResult {
 }
 
 const DEFAULTS: ResolvedConfig = {
-	theme: "mocha",
+	theme: "watermelon",
 	thresholds: {
 		compactAlert: 85,
 		fiveHourAlert: 90,
@@ -155,10 +156,10 @@ export function configSearchPaths(cwd: string): string[] {
 	const paths: string[] = [];
 	const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
 	if (claudeConfigDir) {
-		paths.push(join(claudeConfigDir, "ccstatusline-godlike", "config.jsonc"));
+		paths.push(join(claudeConfigDir, "ccwatermelon", "config.jsonc"));
 	}
-	paths.push(join(homedir(), ".config", "ccstatusline-godlike", "config.jsonc"));
-	paths.push(join(cwd, ".ccstatusline-godlike.jsonc"));
+	paths.push(join(homedir(), ".config", "ccwatermelon", "config.jsonc"));
+	paths.push(join(cwd, ".ccwatermelon.jsonc"));
 	return paths;
 }
 

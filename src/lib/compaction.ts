@@ -8,7 +8,7 @@ function readSettings(): { autoCompactEnabled?: boolean; autoCompactWindow?: num
 		return JSON.parse(readFileSync(CONFIG.paths.settings, "utf-8"));
 	} catch (err) {
 		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-			console.error(`ccstatusline-godlike: settings.json unreadable — ${err}`);
+			console.error(`ccwatermelon: settings.json unreadable — ${err}`);
 		}
 		return {};
 	}

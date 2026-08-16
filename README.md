@@ -1,11 +1,13 @@
-# ccstatusline-godlike
+# ccwatermelon
 
-Personal Claude Code statusline: a 3-line dashboard (4 in alert mode), Catppuccin Mocha palette, Nerd Font glyphs, rendered in ~15-20ms.
+A Claude Code statusline: a 3-line dashboard (4 in alert mode), watermelon palette, Nerd Font glyphs, rendered in ~15-20ms.
+
+Green rind while there is room left, red flesh when there isn't — the fruit's own gradient happens to be exactly the semantics a pressure gauge needs.
 
 ```
 (=ᴥ=)  acme-web ·  main* +12 -3 ·  Opus 4.7 [2]
 󱐋 $3.42 (18m) 🔥 D $95.9 🔥 W $95.9 · cache 41% ⚡ 113 t/s
-🌊 󰄨 conv 55%⡇  ·  5h 20%⡄ ↺3h22 (03:10)  ·  7d 23%⡄ ↺107h18 (11:06)
+🍉 󰄨 conv 55%⡇  ·  5h 20%⡄ ↺3h22 (03:10)  ·  7d 23%⡄ ↺107h18 (11:06)
 ```
 
 In alert mode (context, 5h quota, or 7-day quota above threshold), a 4th line appears with the details and an estimated time-to-limit.
@@ -13,7 +15,7 @@ In alert mode (context, 5h quota, or 7-day quota above threshold), a 4th line ap
 ## Requirements
 
 - **Bun** ≥ 1.1 (runtime, no other one is supported)
-- **A truecolor terminal** (24-bit ANSI) — no 256-color fallback, the Catppuccin Mocha palette is sent as raw RGB
+- **A truecolor terminal** (24-bit ANSI) — no 256-color fallback, the palette is sent as raw RGB
 - **A patched Nerd Font** installed in the terminal (glyphs `󱐋 󰄨 󰅶 ⑂` etc.)
 - `git` on `PATH` (optional — without it, the branch segment simply shows `no-git`)
 
@@ -29,15 +31,16 @@ In `~/.claude/settings.json`:
 {
   "statusLine": {
     "type": "command",
-    "command": "bun ~/.claude/scripts/ccstatusline-godlike/src/index.ts",
+    "command": "bun ~/.claude/scripts/ccwatermelon/src/index.ts",
     "padding": 0
   }
 }
 ```
 
 On first run, if data still exists at the old location
-(`~/.local/share/statusline-godlike/`, before the project was renamed), it
-is moved automatically to `~/.local/share/ccstatusline-godlike/` with no
+(`~/.local/share/ccstatusline-godlike/` or `~/.local/share/statusline-godlike/`,
+under the project's former names), it
+is moved automatically to `~/.local/share/ccwatermelon/` with no
 loss — real cost history is preserved.
 
 ## Segments
@@ -82,9 +85,9 @@ zero risk of pulling a TOML lib into the render path.
 
 ### Resolution cascade
 
-1. `$CLAUDE_CONFIG_DIR/ccstatusline-godlike/config.jsonc` (if the variable is set)
-2. `~/.config/ccstatusline-godlike/config.jsonc`
-3. `./.ccstatusline-godlike.jsonc` (project file, in the session's `cwd`) — **overrides** the previous levels, key by key
+1. `$CLAUDE_CONFIG_DIR/ccwatermelon/config.jsonc` (if the variable is set)
+2. `~/.config/ccwatermelon/config.jsonc`
+3. `./.ccwatermelon.jsonc` (project file, in the session's `cwd`) — **overrides** the previous levels, key by key
 
 Each file is validated independently with **zod** (`safeParse`): an
 invalid file (malformed JSON, out-of-range threshold, wrong type) is
@@ -96,9 +99,8 @@ current behavior unchanged.
 
 ```jsonc
 {
-  // Color theme. Only one exists today (Catppuccin Mocha) — the field is
-  // kept for future extensions.
-  "theme": "mocha",
+  // Color theme: "watermelon" (default) or "mocha" (Catppuccin Mocha).
+  "theme": "watermelon",
 
   "thresholds": {
     "compactAlert": 85,            // % of the "compaction threshold" window that triggers the alert
@@ -107,7 +109,7 @@ current behavior unchanged.
     "compactionReserveRatio": 0.92 // fraction of the window reserved before auto-compact
   },
 
-  // Catppuccin Mocha color overrides, in RGB [0-255, 0-255, 0-255].
+  // Per-color overrides applied on top of the theme, RGB [0-255, 0-255, 0-255].
   // Valid keys: text, subtext, dim, red, peach, yellow, green, teal,
   // sky, blue, lavender, mauve, pink.
   "colors": {
@@ -133,10 +135,10 @@ is rejected as a whole with a message on stderr, and defaults apply.
 
 | Variable | Effect |
 |---|---|
-| `CCSTATUSLINE_WIDTH` | forces the terminal width (otherwise `process.stdout.columns`, then `$COLUMNS`, then 80) |
-| `CCSTATUSLINE_DATA_DIR` | relocates `history.db` and `sessions.json` (default `~/.local/share/ccstatusline-godlike`) |
-| `CCSTATUSLINE_CACHE_DIR` | relocates `limits.json` (default `~/.cache/ccstatusline-godlike`) |
-| `CLAUDE_CONFIG_DIR` | adds `$CLAUDE_CONFIG_DIR/ccstatusline-godlike/config.jsonc` at the top of the config cascade |
+| `CCWATERMELON_WIDTH` | forces the terminal width (otherwise `process.stdout.columns`, then `$COLUMNS`, then 80) |
+| `CCWATERMELON_DATA_DIR` | relocates `history.db` and `sessions.json` (default `~/.local/share/ccwatermelon`) |
+| `CCWATERMELON_CACHE_DIR` | relocates `limits.json` (default `~/.cache/ccwatermelon`) |
+| `CLAUDE_CONFIG_DIR` | adds `$CLAUDE_CONFIG_DIR/ccwatermelon/config.jsonc` at the top of the config cascade |
 
 The first two are mainly used by tests (see `__tests__/integration.test.ts`) so that `bun test` never writes to real data.
 
@@ -144,7 +146,7 @@ The first two are mainly used by tests (see `__tests__/integration.test.ts`) so 
 
 ```bash
 bun run config
-# or, once the package is linked: ccstatusline-godlike-config
+# or, once the package is linked: ccwatermelon-config
 ```
 
 Text menu in ANSI (no React/Ink dependency on this path — only the CLI
@@ -152,7 +154,7 @@ loads it, never the statusline render itself) with a **live preview**:
 every change to a threshold, segment, or color immediately redraws a
 sample of the actual render via the same `render()` function used in
 production, on a fictional dataset close to a real-world case (cost,
-context, quotas). Saves to `~/.config/ccstatusline-godlike/config.jsonc`.
+context, quotas). Saves to `~/.config/ccwatermelon/config.jsonc`.
 
 ## Security & robustness
 
@@ -190,7 +192,7 @@ The hardening here is deliberate.
 
 ## Width & responsiveness
 
-Width is resolved via `CCSTATUSLINE_WIDTH` → `process.stdout.columns` →
+Width is resolved via `CCWATERMELON_WIDTH` → `process.stdout.columns` →
 `$COLUMNS` → `80`, never via `tput` (that's exactly the bug that breaks
 ccstatusline on Windows by creating a `null` file).
 
@@ -241,7 +243,7 @@ line 1, cost+duration on line 2).
 
 ## Comparison with the ecosystem
 
-|  | ccstatusline-godlike | ccstatusline (sirmalloc) | CCometixLine | claude-powerline |
+|  | ccwatermelon | ccstatusline (sirmalloc) | CCometixLine | claude-powerline |
 |---|---|---|---|---|
 | Config | JSONC + zod, 3-level cascade | JSON + React/Ink TUI | TOML + Rust TUI | JSON, 3-level cascade |
 | Widgets | ~20, sized for solo use | 50+ | built-in themes (minimal/gruvbox/nord/powerline) | 4 styles, several themes |
@@ -270,7 +272,7 @@ bun run config                            # config CLI with live preview
 ```
 
 `__tests__/integration.test.ts` isolates all its writes via
-`CCSTATUSLINE_DATA_DIR`/`CCSTATUSLINE_CACHE_DIR` pointed at temporary
+`CCWATERMELON_DATA_DIR`/`CCWATERMELON_CACHE_DIR` pointed at temporary
 directories — never at real data. A perf test keeps the `normal.json`
 fixture render under 250ms.
 

@@ -33,32 +33,32 @@ describe("width", () => {
 		expect(visualWidth(heartWithVs16)).toBe(1);
 	});
 
-	test("resolveWidth reads CCSTATUSLINE_WIDTH env var first", () => {
-		const prev = process.env.CCSTATUSLINE_WIDTH;
-		process.env.CCSTATUSLINE_WIDTH = "42";
+	test("resolveWidth reads CCWATERMELON_WIDTH env var first", () => {
+		const prev = process.env.CCWATERMELON_WIDTH;
+		process.env.CCWATERMELON_WIDTH = "42";
 		try {
 			expect(resolveWidth()).toBe(42);
 		} finally {
 			if (prev === undefined) {
 				// biome-ignore lint/performance/noDelete: env var must be absent for other tests
-				delete process.env.CCSTATUSLINE_WIDTH;
+				delete process.env.CCWATERMELON_WIDTH;
 			} else {
-				process.env.CCSTATUSLINE_WIDTH = prev;
+				process.env.CCWATERMELON_WIDTH = prev;
 			}
 		}
 	});
 
 	test("resolveWidth falls back to a positive value when nothing is set", () => {
-		const prevEnv = process.env.CCSTATUSLINE_WIDTH;
+		const prevEnv = process.env.CCWATERMELON_WIDTH;
 		const prevCols = process.env.COLUMNS;
 		// biome-ignore lint/performance/noDelete: simulating an unset environment
-		delete process.env.CCSTATUSLINE_WIDTH;
+		delete process.env.CCWATERMELON_WIDTH;
 		// biome-ignore lint/performance/noDelete: simulating an unset environment
 		delete process.env.COLUMNS;
 		try {
 			expect(resolveWidth()).toBeGreaterThan(0);
 		} finally {
-			if (prevEnv !== undefined) process.env.CCSTATUSLINE_WIDTH = prevEnv;
+			if (prevEnv !== undefined) process.env.CCWATERMELON_WIDTH = prevEnv;
 			if (prevCols !== undefined) process.env.COLUMNS = prevCols;
 		}
 	});

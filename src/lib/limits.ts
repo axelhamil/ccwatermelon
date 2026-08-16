@@ -23,7 +23,7 @@ function getToken(): string | null {
 		return JSON.parse(raw)?.claudeAiOauth?.accessToken ?? null;
 	} catch (err) {
 		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-			console.error(`ccstatusline-godlike: credentials unreadable — ${err}`);
+			console.error(`ccwatermelon: credentials unreadable — ${err}`);
 		}
 		return null;
 	}
@@ -35,7 +35,7 @@ function readCache(): CachedResponse | null {
 		return JSON.parse(raw);
 	} catch (err) {
 		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-			console.error(`ccstatusline-godlike: limits cache unreadable — ${err}`);
+			console.error(`ccwatermelon: limits cache unreadable — ${err}`);
 		}
 		return null;
 	}
@@ -90,7 +90,7 @@ function spawnRefresh(): void {
 		});
 		proc.unref();
 	} catch (err) {
-		console.error(`ccstatusline-godlike: limits refresh could not be spawned — ${err}`);
+		console.error(`ccwatermelon: limits refresh could not be spawned — ${err}`);
 	}
 }
 
@@ -139,7 +139,7 @@ export async function getUsageLimits(
 		writeCache(normalized, now);
 		return normalized;
 	} catch (err) {
-		console.error(`ccstatusline-godlike: usage limits fetch failed — ${err}`);
+		console.error(`ccwatermelon: usage limits fetch failed — ${err}`);
 		return cached?.data ?? { five_hour: null, seven_day: null };
 	}
 }

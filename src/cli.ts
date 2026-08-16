@@ -12,13 +12,13 @@ import {
 	stripJsonComments,
 } from "./lib/userConfig";
 
-const CONFIG_PATH = join(homedir(), ".config", "ccstatusline-godlike", "config.jsonc");
+const CONFIG_PATH = join(homedir(), ".config", "ccwatermelon", "config.jsonc");
 
 const SAMPLE: StatuslineData = {
 	mood: { kind: "focus", face: "(•‿•)", label: null, color: "yellow" },
-	git: { branch: "feat/godlike-config", dirty: true, insertions: 142, deletions: 38 },
+	git: { branch: "feat/melon-config", dirty: true, insertions: 142, deletions: 38 },
 	modelName: "Opus 4.7",
-	dirName: "ccstatusline-godlike",
+	dirName: "ccwatermelon",
 	activeSessions: 2,
 	sessionCost: 3.42,
 	sessionDurationMs: 18 * 60_000,
@@ -96,14 +96,14 @@ const SEGMENT_IDS = [
 function preview(file: ConfigFile): string {
 	const resolved = toResolved(file);
 	applyPaletteOverrides(resolved.colors);
-	const prevWidth = process.env.CCSTATUSLINE_WIDTH;
-	process.env.CCSTATUSLINE_WIDTH = "110";
+	const prevWidth = process.env.CCWATERMELON_WIDTH;
+	process.env.CCWATERMELON_WIDTH = "110";
 	const out = render(SAMPLE, resolved.segments);
 	if (prevWidth === undefined) {
 		// biome-ignore lint/performance/noDelete: env var must be absent, not the string "undefined"
-		delete process.env.CCSTATUSLINE_WIDTH;
+		delete process.env.CCWATERMELON_WIDTH;
 	} else {
-		process.env.CCSTATUSLINE_WIDTH = prevWidth;
+		process.env.CCWATERMELON_WIDTH = prevWidth;
 	}
 	return out;
 }
@@ -201,7 +201,7 @@ async function main(): Promise<void> {
 	const file = loadWorkingConfig();
 	const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
-	console.log(color("ccstatusline-godlike — interactive config", "peach"));
+	console.log(color("ccwatermelon — interactive config", "peach"));
 	console.log(color(`file: ${CONFIG_PATH}`, "dim"));
 
 	let keepGoing = true;

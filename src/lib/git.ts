@@ -19,7 +19,7 @@ export async function getGitStatus(cwd: string): Promise<GitStatus | null> {
 
 		return { branch, dirty, insertions, deletions };
 	} catch (err) {
-		console.error(`ccstatusline-godlike: git status unavailable for ${cwd} — ${err}`);
+		console.error(`ccwatermelon: git status unavailable for ${cwd} — ${err}`);
 		return null;
 	}
 }

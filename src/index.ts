@@ -41,23 +41,25 @@ async function main(): Promise<void> {
 	try {
 		input = await Bun.stdin.json();
 	} catch {
-		console.log("ccstatusline-godlike: invalid stdin");
+		console.log("ccwatermelon: invalid stdin");
 		return;
 	}
 
 	try {
-		if (!process.env.CCSTATUSLINE_DATA_DIR && !process.env.CCSTATUSLINE_CACHE_DIR) {
-			migrateLegacyPaths([
-				{ from: CONFIG.paths.legacy.historyDb, to: CONFIG.paths.historyDb },
-				{ from: CONFIG.paths.legacy.sessionsJson, to: CONFIG.paths.sessionsJson },
-				{ from: CONFIG.paths.legacy.limitsCache, to: CONFIG.paths.limitsCache },
-			]);
+		if (!process.env.CCWATERMELON_DATA_DIR && !process.env.CCWATERMELON_CACHE_DIR) {
+			migrateLegacyPaths(
+				CONFIG.paths.legacy.flatMap((legacy) => [
+					{ from: legacy.historyDb, to: CONFIG.paths.historyDb },
+					{ from: legacy.sessionsJson, to: CONFIG.paths.sessionsJson },
+					{ from: legacy.limitsCache, to: CONFIG.paths.limitsCache },
+				]),
+			);
 		}
 
 		const cwd = input.workspace?.current_dir ?? process.cwd();
 		const { config: userConfig, errors: configErrors } = loadUserConfig(cwd);
-		for (const err of configErrors) console.error(`ccstatusline-godlike: config error — ${err}`);
-		applyPaletteOverrides(userConfig.colors);
+		for (const err of configErrors) console.error(`ccwatermelon: config error — ${err}`);
+		applyPaletteOverrides(userConfig.colors, userConfig.theme);
 
 		const nowSec = Math.floor(Date.now() / 1000);
 		const minuteBucket = Math.floor(nowSec / 60) * 60;
@@ -194,7 +196,7 @@ async function main(): Promise<void> {
 
 		console.log(render(data, userConfig.segments));
 	} catch (err) {
-		console.error(`ccstatusline-godlike: fallback path hit — ${err}`);
+		console.error(`ccwatermelon: fallback path hit — ${err}`);
 		console.log(fallback(input.workspace?.current_dir ?? "?", input.model?.display_name ?? "?"));
 	}
 }

@@ -7,7 +7,7 @@ import type { StatuslineData } from "./types";
 import { resolveWidth, visualWidth } from "./width";
 
 const FIRE = "🔥";
-const WAVE = "🌊";
+const MELON = "🍉";
 const BOLT = "⚡";
 const DOT = color("·", "dim");
 const COST_MILESTONES = [10, 25, 50, 100];
@@ -301,12 +301,12 @@ function renderGaugeLine(d: StatuslineData, segments: SegmentConfig, width: numb
 		});
 	}
 
-	if (gauges.length === 0) return color(`${WAVE} gauges unavailable`, "dim");
+	if (gauges.length === 0) return color(`${MELON} gauges unavailable`, "dim");
 
 	const sorted = [...gauges].sort((a, b) => a.priority - b.priority);
 	const kept = new Set(gauges.map((g) => g.id));
 	const compose = () =>
-		`${WAVE} ${gauges
+		`${MELON} ${gauges
 			.filter((g) => kept.has(g.id))
 			.map((g) => g.text)
 			.join(`  ${DOT}  `)}`;

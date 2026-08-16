@@ -17,15 +17,44 @@ const DEFAULT_PALETTE = {
 export type ColorName = keyof typeof DEFAULT_PALETTE;
 export type Rgb = readonly [number, number, number];
 
-export const PALETTE: Record<ColorName, Rgb> = { ...DEFAULT_PALETTE };
+// Watermelon: rind green for healthy gauges, flesh red for pressure, with the
+// pale rind and seed-dark greys carrying the quiet text. The fruit's own
+// gradient happens to match the semantics already in place — green when there
+// is room left, red when there is not.
+const WATERMELON_PALETTE = {
+	text: [244, 240, 226],
+	subtext: [168, 198, 159],
+	dim: [90, 110, 86],
+	red: [255, 77, 109],
+	peach: [255, 143, 163],
+	yellow: [247, 212, 136],
+	green: [123, 201, 80],
+	teal: [63, 164, 106],
+	sky: [111, 207, 151],
+	blue: [79, 180, 119],
+	lavender: [201, 228, 166],
+	mauve: [232, 106, 138],
+	pink: [255, 168, 186],
+} as const satisfies Record<ColorName, Rgb>;
 
-// Applies user config color overrides on top of the Catppuccin Mocha
-// defaults. Unknown keys are ignored (already rejected by zod upstream);
-// called once at startup, never on a per-render basis.
-export function applyPaletteOverrides(overrides: Record<string, Rgb>): void {
+export const THEMES = {
+	watermelon: WATERMELON_PALETTE,
+	mocha: DEFAULT_PALETTE,
+} as const;
+
+export type ThemeName = keyof typeof THEMES;
+
+export const PALETTE: Record<ColorName, Rgb> = { ...WATERMELON_PALETTE };
+
+// Applies the selected theme, then user color overrides on top of it.
+// Called once at startup, never on a per-render basis.
+export function applyPaletteOverrides(
+	overrides: Record<string, Rgb>,
+	theme: ThemeName = "watermelon",
+): void {
+	const base = THEMES[theme] ?? WATERMELON_PALETTE;
 	for (const key of Object.keys(DEFAULT_PALETTE) as ColorName[]) {
-		const override = overrides[key];
-		PALETTE[key] = override ?? DEFAULT_PALETTE[key];
+		PALETTE[key] = overrides[key] ?? base[key];
 	}
 }
 

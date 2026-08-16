@@ -57,7 +57,7 @@ export function visualWidth(s: string): number {
 }
 
 export function resolveWidth(): number {
-	const envWidth = process.env.CCSTATUSLINE_WIDTH;
+	const envWidth = process.env.CCWATERMELON_WIDTH;
 	if (envWidth) {
 		const n = Number.parseInt(envWidth, 10);
 		if (Number.isFinite(n) && n > 0) return n;

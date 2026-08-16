@@ -3,8 +3,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const dataDir = mkdtempSync(join(tmpdir(), "ccstatusline-data-"));
-const cacheDir = mkdtempSync(join(tmpdir(), "ccstatusline-cache-"));
+const dataDir = mkdtempSync(join(tmpdir(), "ccwatermelon-data-"));
+const cacheDir = mkdtempSync(join(tmpdir(), "ccwatermelon-cache-"));
 
 afterAll(() => {
 	rmSync(dataDir, { recursive: true, force: true });
@@ -17,9 +17,9 @@ async function runPayload(payload: unknown, width = 120): Promise<string> {
 		stdout: "pipe",
 		env: {
 			...process.env,
-			CCSTATUSLINE_WIDTH: String(width),
-			CCSTATUSLINE_DATA_DIR: dataDir,
-			CCSTATUSLINE_CACHE_DIR: cacheDir,
+			CCWATERMELON_WIDTH: String(width),
+			CCWATERMELON_DATA_DIR: dataDir,
+			CCWATERMELON_CACHE_DIR: cacheDir,
 		},
 	});
 	const out = await new Response(proc.stdout).text();
@@ -73,9 +73,9 @@ describe("integration", () => {
 	}, 8000);
 
 	test("project-local config disables a segment for the render", async () => {
-		const projectDir = mkdtempSync(join(tmpdir(), "ccstatusline-project-"));
+		const projectDir = mkdtempSync(join(tmpdir(), "ccwatermelon-project-"));
 		writeFileSync(
-			join(projectDir, ".ccstatusline-godlike.jsonc"),
+			join(projectDir, ".ccwatermelon.jsonc"),
 			`{
 				// disable the tokens/s segment for this project
 				"segments": { "tps": { "enabled": false } }

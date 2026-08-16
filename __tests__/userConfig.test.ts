@@ -34,7 +34,7 @@ describe("loadUserConfig", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "ccstatusline-"));
 		dirs.push(cwd);
 		writeFileSync(
-			join(cwd, ".ccstatusline-godlike.jsonc"),
+			join(cwd, ".ccwatermelon.jsonc"),
 			`{
 				// custom threshold
 				"thresholds": { "compactAlert": 70 }
@@ -49,10 +49,7 @@ describe("loadUserConfig", () => {
 	test("invalid config falls back to defaults and reports an error, never throws", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "ccstatusline-"));
 		dirs.push(cwd);
-		writeFileSync(
-			join(cwd, ".ccstatusline-godlike.jsonc"),
-			`{ "thresholds": { "compactAlert": 500 } }`,
-		);
+		writeFileSync(join(cwd, ".ccwatermelon.jsonc"), `{ "thresholds": { "compactAlert": 500 } }`);
 		const { config, errors } = loadUserConfig(cwd);
 		expect(config.thresholds.compactAlert).toBe(85);
 		expect(errors.length).toBe(1);
@@ -61,7 +58,7 @@ describe("loadUserConfig", () => {
 	test("malformed JSON falls back to defaults and reports an error, never throws", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "ccstatusline-"));
 		dirs.push(cwd);
-		writeFileSync(join(cwd, ".ccstatusline-godlike.jsonc"), "{ not json`");
+		writeFileSync(join(cwd, ".ccwatermelon.jsonc"), "{ not json`");
 		const { config, errors } = loadUserConfig(cwd);
 		expect(config.thresholds.compactAlert).toBe(85);
 		expect(errors.length).toBe(1);

@@ -19,7 +19,7 @@ export class SessionsStore {
 			return Array.isArray(parsed) ? parsed : [];
 		} catch (err) {
 			if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-				console.error(`ccstatusline-godlike: sessions store unreadable, resetting — ${err}`);
+				console.error(`ccwatermelon: sessions store unreadable, resetting — ${err}`);
 			}
 			return [];
 		}

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const cacheDir = mkdtempSync(join(tmpdir(), "ccsl-limits-"));
-process.env.CCSTATUSLINE_CACHE_DIR = cacheDir;
+process.env.CCWATERMELON_CACHE_DIR = cacheDir;
 
 const { limitsFromCache, limitsFromPayload } = await import("../src/lib/limits");
 
