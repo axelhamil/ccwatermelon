@@ -22,8 +22,12 @@ In alert mode (context, 5h quota, or 7-day quota above threshold), a 4th line ap
 ## Installation
 
 ```bash
+git clone https://github.com/axelhamil/ccwatermelon.git ~/.claude/scripts/ccwatermelon
+cd ~/.claude/scripts/ccwatermelon
 bun install
 ```
+
+Any directory works — just keep the path in `statusLine.command` below in sync.
 
 In `~/.claude/settings.json`:
 
