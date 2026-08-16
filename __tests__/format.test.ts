@@ -1,5 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { formatCost, formatDuration, formatTokens, formatPct, color } from "../src/lib/format";
+import {
+	color,
+	colorRgb,
+	formatCost,
+	formatDuration,
+	formatPct,
+	formatTokens,
+	gradientText,
+	lerpColor,
+} from "../src/lib/format";
+
+// biome-ignore lint/suspicious/noControlCharactersInRegex: strips ANSI color codes for assertions
+const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
 
 describe("formatCost", () => {
 	test("under $10 shows 2 decimals", () => {
@@ -50,5 +62,45 @@ describe("color", () => {
 		expect(result.startsWith("\x1b[38;2;")).toBe(true);
 		expect(result.endsWith("\x1b[0m")).toBe(true);
 		expect(result).toContain("hello");
+	});
+});
+
+describe("colorRgb", () => {
+	test("wraps text with a literal rgb triple", () => {
+		const result = colorRgb("x", [10, 20, 30]);
+		expect(result).toBe("\x1b[38;2;10;20;30mx\x1b[0m");
+	});
+});
+
+describe("lerpColor", () => {
+	test("t=0 returns first color", () => {
+		expect(lerpColor(0, [0, 0, 0], [255, 255, 255])).toEqual([0, 0, 0]);
+	});
+	test("t=1 returns second color", () => {
+		expect(lerpColor(1, [0, 0, 0], [255, 255, 255])).toEqual([255, 255, 255]);
+	});
+	test("t=0.5 returns midpoint", () => {
+		expect(lerpColor(0.5, [0, 0, 0], [200, 200, 200])).toEqual([100, 100, 100]);
+	});
+	test("clamps out-of-range t", () => {
+		expect(lerpColor(-1, [10, 10, 10], [20, 20, 20])).toEqual([10, 10, 10]);
+		expect(lerpColor(2, [10, 10, 10], [20, 20, 20])).toEqual([20, 20, 20]);
+	});
+});
+
+describe("gradientText", () => {
+	test("preserves character content once stripped of color", () => {
+		const result = gradientText("$12.50");
+		expect(stripAnsi(result)).toBe("$12.50");
+	});
+	test("keeps literal spaces uncolored", () => {
+		const result = gradientText("a b");
+		expect(result).toContain(" ");
+	});
+	test("colors each non-space character independently", () => {
+		const result = gradientText("ab");
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: matches ANSI color codes
+		const codes = result.match(/\x1b\[[0-9;]*m/g) ?? [];
+		expect(codes.length).toBeGreaterThanOrEqual(4);
 	});
 });

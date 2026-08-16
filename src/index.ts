@@ -1,10 +1,11 @@
 import { basename } from "node:path";
 import { CONFIG } from "./config";
 import { burnRate } from "./lib/burn";
+import { compactThreshold } from "./lib/compaction";
 import { forecastEta } from "./lib/forecast";
 import { getGitStatus } from "./lib/git";
 import { History } from "./lib/history";
-import { getUsageLimits } from "./lib/limits";
+import { getUsageLimits, limitsFromPayload } from "./lib/limits";
 import { classifyMood } from "./lib/mood";
 import { render } from "./lib/render";
 import { SessionsStore } from "./lib/sessions";
@@ -32,8 +33,13 @@ async function main(): Promise<void> {
 
 		const history = new History(CONFIG.paths.historyDb);
 		history.prune(CONFIG.history.retentionMinutes, nowSec);
+		history.pruneCosts(CONFIG.history.costRetentionDays, nowSec);
 
-		const [git, limits] = await Promise.all([getGitStatus(cwd), getUsageLimits(nowSec)]);
+		const payloadLimits = limitsFromPayload(input.rate_limits);
+		const [git, limits] = await Promise.all([
+			getGitStatus(cwd),
+			payloadLimits ?? getUsageLimits(nowSec),
+		]);
 
 		const ctxUsage = input.context_window?.current_usage;
 		const contextTokens = ctxUsage
@@ -41,6 +47,10 @@ async function main(): Promise<void> {
 				(ctxUsage.cache_creation_input_tokens ?? 0) +
 				(ctxUsage.cache_read_input_tokens ?? 0)
 			: null;
+		const cacheHitPct =
+			ctxUsage && contextTokens
+				? Math.round(((ctxUsage.cache_read_input_tokens ?? 0) / contextTokens) * 100)
+				: null;
 		const ctxMax = input.context_window?.context_window_size ?? 200_000;
 		const contextPct =
 			input.context_window?.used_percentage ??
@@ -49,14 +59,25 @@ async function main(): Promise<void> {
 		const sessionCost = input.cost.total_cost_usd;
 		const sessionDur = input.cost.total_duration_ms;
 		const apiDur = input.cost.total_api_duration_ms ?? 0;
-		const tokensPerSec =
-			apiDur > 0 && contextTokens ? (contextTokens / apiDur) * 1000 : null;
+		const tokensPerSec = apiDur > 0 && contextTokens ? (contextTokens / apiDur) * 1000 : null;
 		const fiveHourPct = limits.five_hour?.utilization ?? null;
 		const fiveHourResetsAt = limits.five_hour?.resets_at ?? null;
+		const sevenDayPct = limits.seven_day?.utilization ?? null;
+		const sevenDayResetsAt = limits.seven_day?.resets_at ?? null;
+
+		const threshold = compactThreshold(ctxMax);
+		const compactPct =
+			threshold !== null && contextTokens !== null
+				? Math.round((contextTokens / threshold) * 100)
+				: null;
+		const tokensToCompact =
+			threshold !== null && contextTokens !== null ? Math.max(0, threshold - contextTokens) : null;
 
 		// Record samples
 		history.record("cost", sessionCost, minuteBucket);
-		if (contextPct !== null) history.record("ctx_pct", contextPct, minuteBucket);
+		history.recordSessionCost(input.session_id, sessionCost, nowSec);
+		if (compactPct !== null) history.record("ctx_pct", compactPct, minuteBucket);
+		else if (contextPct !== null) history.record("ctx_pct", contextPct, minuteBucket);
 		if (fiveHourPct !== null) history.record("5h_pct", fiveHourPct, minuteBucket);
 		if (tokensPerSec !== null) history.record("tps", tokensPerSec, minuteBucket);
 
@@ -80,19 +101,20 @@ async function main(): Promise<void> {
 		const activeSessions = sessionsStore.countActive(5, nowMs);
 
 		// Alert / mood / forecast
+		const pressurePct = compactPct ?? contextPct;
 		const alertMode =
-			(contextPct !== null && contextPct > CONFIG.thresholds.contextAlert) ||
-			(fiveHourPct !== null && fiveHourPct > CONFIG.thresholds.fiveHourAlert);
-		const mood = classifyMood({ contextPct, sessionCost, fiveHourPct });
+			(pressurePct !== null && pressurePct > CONFIG.thresholds.compactAlert) ||
+			(fiveHourPct !== null && fiveHourPct > CONFIG.thresholds.fiveHourAlert) ||
+			(sevenDayPct !== null && sevenDayPct > CONFIG.thresholds.sevenDayAlert);
+		const mood = classifyMood({ contextPct: pressurePct, sessionCost, fiveHourPct, sevenDayPct });
 		const { minutes: etaMinutes, cooling: etaCooling } = alertMode
 			? forecastEta(fhSeries, 100)
 			: { minutes: null, cooling: false };
 
-		history.close();
+		const todayCost = history.costToday(nowSec);
+		const weekCost = history.costSince(nowSec - 7 * 86400);
 
-		// todayCost / weekCost aggregation deferred to v0.2 — render hides segments when 0
-		const todayCost = 0;
-		const weekCost = 0;
+		history.close();
 
 		const data: StatuslineData = {
 			mood,
@@ -107,12 +129,16 @@ async function main(): Promise<void> {
 			contextPct,
 			contextTokens,
 			contextSeries: ctxSeries,
+			compactPct,
+			tokensToCompact,
 			fiveHourPct,
 			fiveHourResetsAt,
 			fiveHourSeries: fhSeries,
+			sevenDayPct,
+			sevenDayResetsAt,
 			tokensPerSec,
 			tokensPerSecSeries: tpsSeries,
-			cacheHitPct: null,
+			cacheHitPct,
 			burnRatePerHr: burn,
 			etaMinutes,
 			etaCooling,

@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
 import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { CONFIG } from "../config";
-import type { UsageLimit } from "./types";
+import type { HookInput, UsageLimit } from "./types";
 
 const API_URL = "https://api.anthropic.com/api/oauth/usage";
 const CRED_PATH = join(homedir(), ".claude", ".credentials.json");
@@ -37,14 +37,28 @@ function readCache(): CachedResponse | null {
 
 function writeCache(data: UsageLimits, now: number): void {
 	mkdirSync(dirname(CONFIG.paths.limitsCache), { recursive: true });
-	writeFileSync(
-		CONFIG.paths.limitsCache,
-		JSON.stringify({ fetchedAt: now, data }),
-		"utf-8",
-	);
+	writeFileSync(CONFIG.paths.limitsCache, JSON.stringify({ fetchedAt: now, data }), "utf-8");
 }
 
-export async function getUsageLimits(now: number = Math.floor(Date.now() / 1000)): Promise<UsageLimits> {
+export function limitsFromPayload(rateLimits: HookInput["rate_limits"]): UsageLimits | null {
+	const fh = rateLimits?.five_hour;
+	const sd = rateLimits?.seven_day;
+	if (fh?.used_percentage === undefined && sd?.used_percentage === undefined) return null;
+	return {
+		five_hour:
+			fh?.used_percentage === undefined
+				? null
+				: { utilization: Math.round(fh.used_percentage), resets_at: fh.resets_at ?? null },
+		seven_day:
+			sd?.used_percentage === undefined
+				? null
+				: { utilization: Math.round(sd.used_percentage), resets_at: sd.resets_at ?? null },
+	};
+}
+
+export async function getUsageLimits(
+	now: number = Math.floor(Date.now() / 1000),
+): Promise<UsageLimits> {
 	const cached = readCache();
 	if (cached && now - cached.fetchedAt < CONFIG.limits.cacheTtlSec) {
 		return cached.data;
@@ -71,10 +85,16 @@ export async function getUsageLimits(now: number = Math.floor(Date.now() / 1000)
 		const data = (await response.json()) as UsageLimits;
 		const normalized: UsageLimits = {
 			five_hour: data.five_hour
-				? { utilization: Math.round(data.five_hour.utilization), resets_at: data.five_hour.resets_at }
+				? {
+						utilization: Math.round(data.five_hour.utilization),
+						resets_at: data.five_hour.resets_at,
+					}
 				: null,
 			seven_day: data.seven_day
-				? { utilization: Math.round(data.seven_day.utilization), resets_at: data.seven_day.resets_at }
+				? {
+						utilization: Math.round(data.seven_day.utilization),
+						resets_at: data.seven_day.resets_at,
+					}
 				: null,
 		};
 		writeCache(normalized, now);

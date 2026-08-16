@@ -6,14 +6,21 @@ export const CONFIG = {
 		historyDb: join(homedir(), ".local/share/statusline-godlike/history.db"),
 		sessionsJson: join(homedir(), ".local/share/statusline-godlike/sessions.json"),
 		limitsCache: join(homedir(), ".cache/statusline-godlike/limits.json"),
+		settings: join(homedir(), ".claude/settings.json"),
 	},
 	history: {
 		retentionMinutes: 30,
 		windowMinutes: 8,
+		costRetentionDays: 30,
 	},
 	thresholds: {
-		contextAlert: 85,
+		compactAlert: 85,
 		fiveHourAlert: 90,
+		sevenDayAlert: 80,
+	},
+	compaction: {
+		fallbackWindow: 200_000,
+		reserveRatio: 0.92,
 	},
 	limits: {
 		cacheTtlSec: 60,

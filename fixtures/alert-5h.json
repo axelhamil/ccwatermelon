@@ -1,7 +1,32 @@
 {
   "session_id": "fix-alert-5h",
-  "workspace": {"current_dir": "/home/axel/DEV/raphael-openup-app"},
-  "model": {"display_name": "Opus 4.7"},
-  "cost": {"total_cost_usd": 5.5, "total_duration_ms": 3600000, "total_api_duration_ms": 3000000},
-  "context_window": {"current_usage": {"input_tokens": 80000, "cache_read_input_tokens": 10000}, "used_percentage": 45, "context_window_size": 200000}
+  "workspace": {
+    "current_dir": "/home/axel/DEV/raphael-openup-app"
+  },
+  "model": {
+    "display_name": "Opus 4.7"
+  },
+  "cost": {
+    "total_cost_usd": 5.5,
+    "total_duration_ms": 3600000,
+    "total_api_duration_ms": 3000000
+  },
+  "context_window": {
+    "current_usage": {
+      "input_tokens": 80000,
+      "cache_read_input_tokens": 10000
+    },
+    "used_percentage": 45,
+    "context_window_size": 200000
+  },
+  "rate_limits": {
+    "five_hour": {
+      "used_percentage": 20,
+      "resets_at": null
+    },
+    "seven_day": {
+      "used_percentage": 23,
+      "resets_at": null
+    }
+  }
 }

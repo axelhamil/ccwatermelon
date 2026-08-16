@@ -5,18 +5,24 @@ export interface Mood {
 	face: string;
 	label: string | null;
 	color: string;
-	pulseFast: boolean;
 }
 
 export interface UsageLimit {
 	utilization: number;
-	resets_at: string | null;
+	resets_at: string | number | null;
 }
 
 export interface HookInput {
 	session_id: string;
+	version?: string;
 	workspace: { current_dir: string };
-	model: { display_name: string };
+	model: { display_name: string; id?: string };
+	effort?: { level?: string };
+	thinking?: { enabled?: boolean };
+	rate_limits?: {
+		five_hour?: { used_percentage?: number; resets_at?: number | string | null };
+		seven_day?: { used_percentage?: number; resets_at?: number | string | null };
+	};
 	cost: {
 		total_cost_usd: number;
 		total_duration_ms: number;
@@ -63,10 +69,15 @@ export interface StatuslineData {
 	contextPct: number | null;
 	contextTokens: number | null;
 	contextSeries: number[];
+	compactPct: number | null;
+	tokensToCompact: number | null;
 
 	fiveHourPct: number | null;
-	fiveHourResetsAt: string | null;
+	fiveHourResetsAt: string | number | null;
 	fiveHourSeries: number[];
+
+	sevenDayPct: number | null;
+	sevenDayResetsAt: string | number | null;
 
 	tokensPerSec: number | null;
 	tokensPerSecSeries: number[];

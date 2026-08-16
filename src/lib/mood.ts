@@ -4,24 +4,26 @@ export interface MoodInput {
 	contextPct: number | null;
 	sessionCost: number;
 	fiveHourPct: number | null;
+	sevenDayPct: number | null;
 }
 
 export function classifyMood(input: MoodInput): Mood {
 	const ctx = input.contextPct ?? 0;
 	const cost = input.sessionCost;
 	const fh = input.fiveHourPct ?? 0;
+	const sd = input.sevenDayPct ?? 0;
 
-	if (ctx > 95 || fh > 97) {
-		return { kind: "panic", face: "(˵=͟͟͞╯°□°)╯", label: "PANIC", color: "red", pulseFast: true };
+	if (ctx > 95 || fh > 97 || sd > 95) {
+		return { kind: "panic", face: "(╯°□°)╯", label: null, color: "red" };
 	}
-	if (ctx > 85 || fh > 90) {
-		return { kind: "stressed", face: "(◉_◉)⚠", label: "stressed", color: "red", pulseFast: false };
+	if (ctx > 85 || fh > 90 || sd > 85) {
+		return { kind: "stressed", face: "(◉_◉)", label: null, color: "red" };
 	}
-	if (ctx > 70 || cost > 5 || fh > 70) {
-		return { kind: "focus", face: "(•‿•)", label: "focus", color: "yellow", pulseFast: false };
+	if (ctx > 70 || cost > 5 || fh > 70 || sd > 70) {
+		return { kind: "focus", face: "(•‿•)", label: null, color: "yellow" };
 	}
-	if (ctx < 30 && cost < 1 && fh < 10) {
-		return { kind: "rose", face: "(◕‿◕)♡", label: null, color: "pink", pulseFast: false };
+	if (ctx < 30 && cost < 1 && fh < 10 && sd < 30) {
+		return { kind: "rose", face: "(◕‿◕)", label: null, color: "pink" };
 	}
-	return { kind: "zen", face: "(=ᴥ=)~", label: null, color: "teal", pulseFast: false };
+	return { kind: "zen", face: "(=ᴥ=)", label: null, color: "teal" };
 }
