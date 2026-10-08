@@ -1,0 +1,57 @@
+{
+	"session_id": "fix-subagents",
+	"cwd": "/home/dev/projects/acme-web",
+	"columns": 100,
+	"tasks": [
+		{
+			"id": "a1f3c9e2",
+			"name": "explorer",
+			"type": "local_agent",
+			"agentType": "Explore",
+			"status": "running",
+			"description": "Map every caller of the billing webhook handler",
+			"label": "Map every caller of the billing webhook handler",
+			"startTime": 1791460800000,
+			"model": "claude-haiku-4-5-20251001",
+			"effort": "low",
+			"contextWindowSize": 200000,
+			"tokenCount": 48200,
+			"tokenSamples": [
+				1200, 4100, 6900, 9800, 14200, 18900, 21000, 24800, 27500, 31200, 35400, 38100, 41000,
+				43900, 46300, 48200
+			],
+			"cwd": "/home/dev/projects/acme-web"
+		},
+		{
+			"id": "b7d20a55",
+			"type": "local_agent",
+			"agentType": "feature-dev:code-reviewer",
+			"status": "completed",
+			"description": "Review the retry policy diff for double charges",
+			"label": "Review the retry policy diff",
+			"startTime": 1791460380000,
+			"model": "claude-opus-4-5-20251101",
+			"effort": "high",
+			"contextWindowSize": 200000,
+			"tokenCount": 131400,
+			"tokenSamples": [
+				88000, 92500, 97000, 104000, 109500, 118000, 121000, 124500, 127000, 129800, 131400
+			],
+			"cwd": "/home/dev/projects/acme-web"
+		},
+		{
+			"id": "c04e8b17",
+			"name": "docs",
+			"type": "local_agent",
+			"agentType": "explore-docs",
+			"status": "failed",
+			"description": "Read the Stripe idempotency key documentation",
+			"label": "Read the Stripe idempotency key documentation",
+			"startTime": 1791460710000,
+			"model": "sonnet",
+			"tokenCount": 920,
+			"tokenSamples": [310, 920],
+			"cwd": "/home/dev/projects/acme-web"
+		}
+	]
+}
