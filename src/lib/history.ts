@@ -21,6 +21,7 @@ const SCHEMA = `
 		session_id TEXT NOT NULL,
 		day TEXT NOT NULL,
 		cost REAL NOT NULL,
+		project TEXT,
 		PRIMARY KEY (session_id, day)
 	);
 	CREATE INDEX IF NOT EXISTS daily_cost_day ON daily_cost(day);
@@ -51,6 +52,7 @@ export class History {
 
 			this.db.exec(SCHEMA);
 			if (!hadDailyCost) this.backfillDailyCost();
+			if (!this.hasColumn("daily_cost", "project")) this.addDailyCostProject();
 		});
 
 		migration.immediate();
@@ -64,14 +66,31 @@ export class History {
 		return row !== null;
 	}
 
+	private hasColumn(table: string, column: string): boolean {
+		const row = this.db
+			.query("SELECT 1 FROM pragma_table_info(?) WHERE name = ?")
+			.get(table, column);
+
+		return row !== null;
+	}
+
 	private backfillDailyCost(): void {
 		this.db.exec(`
-			INSERT OR IGNORE INTO daily_cost
+			INSERT OR IGNORE INTO daily_cost (session_id, day, cost)
 			SELECT session_id, date(updated_at, 'unixepoch', 'localtime'), cost FROM session_cost
 		`);
 	}
 
-	recordSessionCost(sessionId: string, cost: number, now: number): void {
+	private addDailyCostProject(): void {
+		this.db.exec(`
+			ALTER TABLE daily_cost ADD COLUMN project TEXT;
+			UPDATE daily_cost SET project = (
+				SELECT project FROM active_session WHERE active_session.session_id = daily_cost.session_id
+			);
+		`);
+	}
+
+	recordSessionCost(sessionId: string, project: string, cost: number, now: number): void {
 		const record = this.db.transaction(() => {
 			const previous = this.db
 				.query("SELECT cost FROM session_cost WHERE session_id = ?")
@@ -88,9 +107,9 @@ export class History {
 
 			this.db
 				.query(
-					`INSERT INTO daily_cost VALUES (?, ${LOCAL_DAY}, ?) ON CONFLICT(session_id, day) DO UPDATE SET cost = cost + excluded.cost`,
+					`INSERT INTO daily_cost (session_id, day, cost, project) VALUES (?, ${LOCAL_DAY}, ?, ?) ON CONFLICT(session_id, day) DO UPDATE SET cost = cost + excluded.cost, project = excluded.project`,
 				)
-				.run(sessionId, now, spent);
+				.run(sessionId, now, spent, project);
 		});
 
 		record.immediate();
@@ -98,6 +117,16 @@ export class History {
 
 	costToday(now: number): number {
 		return this.costOverDays(1, now);
+	}
+
+	projectCostToday(project: string, now: number): number {
+		const row = this.db
+			.query(
+				`SELECT COALESCE(SUM(cost), 0) AS total FROM daily_cost WHERE project = ? AND day = ${LOCAL_DAY}`,
+			)
+			.get(project, now) as { total: number } | null;
+
+		return row?.total ?? 0;
 	}
 
 	costOverDays(days: number, now: number): number {

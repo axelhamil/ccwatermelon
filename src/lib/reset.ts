@@ -25,13 +25,21 @@ function localClock(resetsAt: number, totalMinutes: number): string {
 	return totalMinutes >= DAY_MINUTES && weekday ? `${weekday} ${time}` : time;
 }
 
-export function formatReset(resetsAt: number | null, nowMs: number): string {
-	if (resetsAt === null) return "";
+export interface Reset {
+	countdown: string;
+	clock: string;
+}
+
+export function resetOf(resetsAt: number | null, nowMs: number): Reset | null {
+	if (resetsAt === null) return null;
 
 	const secondsLeft = resetsAt - nowMs / 1000;
-	if (!Number.isFinite(secondsLeft) || secondsLeft <= 0) return "";
+	if (!Number.isFinite(secondsLeft) || secondsLeft <= 0) return null;
 
 	const totalMinutes = Math.ceil(secondsLeft / 60);
 
-	return `↺${countdown(totalMinutes)} (${localClock(resetsAt, totalMinutes)})`;
+	return {
+		countdown: `↺${countdown(totalMinutes)}`,
+		clock: `(${localClock(resetsAt, totalMinutes)})`,
+	};
 }

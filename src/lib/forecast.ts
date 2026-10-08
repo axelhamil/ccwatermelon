@@ -30,5 +30,5 @@ export function forecastEta(samples: Sample[], target: number): EtaResult {
 	if (slope <= 0) return { minutes: null, cooling: slope < 0 };
 	if (last.value >= target) return { minutes: 0, cooling: false };
 
-	return { minutes: Math.round((target - last.value) / slope), cooling: false };
+	return { minutes: Math.max(1, Math.ceil((target - last.value) / slope)), cooling: false };
 }

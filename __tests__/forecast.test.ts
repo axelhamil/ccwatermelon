@@ -22,6 +22,10 @@ describe("forecastEta", () => {
 		expect(forecastEta(sparse, 100)).toEqual({ minutes: 10, cooling: false });
 	});
 
+	test("given a limit less than a minute away, then it is not announced as already reached", () => {
+		expect(forecastEta(everyMinute([90, 94, 98, 99.7]), 100).minutes).toBe(1);
+	});
+
 	test("given flat usage, then there is no forecast and no cooling", () => {
 		expect(forecastEta(everyMinute([50, 50, 50]), 100)).toEqual({ minutes: null, cooling: false });
 	});

@@ -1,32 +1,31 @@
-import type { Part } from "./fit";
-import { fitChunks, fitParts } from "./fit";
+import type { Chunk } from "./fit";
+import { fitChunks } from "./fit";
 import type { ColorName } from "./format";
 import { color, formatCost, formatDuration, formatPct, formatTokens, gradientText } from "./format";
 import { brailleGauge } from "./gauge";
-import { formatReset } from "./reset";
+import { isAlerting, type PressureLevel, toneOf } from "./pressure";
+import { resetOf } from "./reset";
 import type { SegmentConfig } from "./segments";
-import { CACHE_ALERT_PCT, dot, isEnabled, optionalChunks, priorityOf } from "./segments";
+import {
+	dot,
+	GAUGE_SEGMENTS,
+	isEnabled,
+	optionalChunks,
+	PACE_SEGMENT,
+	priorityOf,
+} from "./segments";
 import type { StatuslineData } from "./types";
 import { resolveWidth, truncateToWidth, visualWidth } from "./width";
 
 const MELON = "🍉";
 const COST_ICON = "\u{f140b}";
-const CONTEXT_ICON = "\u{f0128}";
 const COST_MILESTONES = [10, 25, 50, 100];
+const ROW_INDENT = "\u{2800}\u{2800} ";
 const MIN_LABEL_WIDTH = 6;
-
-interface Tones {
-	calm: ColorName;
-	warnAbove: number;
-	criticalAbove: number;
-}
-
-function toneFor(pct: number, { calm, warnAbove, criticalAbove }: Tones): ColorName {
-	if (pct > criticalAbove) return "red";
-	if (pct > warnAbove) return "peach";
-
-	return calm;
-}
+const HEADROOM_SHOWN_ABOVE_PCT = 60;
+const PACE_WARN_ABOVE_PCT = 85;
+const PACE_DISPLAY_CEILING = 999;
+const DRIFT_PER_SECOND = 0.35;
 
 function shrinkToFit(labels: string[], excess: number): string[] {
 	const shrunk = [...labels];
@@ -46,19 +45,61 @@ function shrinkToFit(labels: string[], excess: number): string[] {
 	return shrunk;
 }
 
-function identityCore(d: StatuslineData, dirName: string, branchName: string): string {
+function driftOf(now: number): number {
+	return Math.floor(now / 1000) * DRIFT_PER_SECOND;
+}
+
+function gaugeHead(
+	label: string,
+	pct: number,
+	level: PressureLevel,
+	calm: ColorName,
+	now: number,
+	pctWidth = 0,
+): string {
+	const tone = toneOf(level, calm);
+	const isPulseBeat = isAlerting(level) && Math.floor(now / 1000) % 2 === 1;
+
+	return (
+		color(`${label} ${formatPct(pct).padStart(pctWidth)}`, tone) +
+		color(brailleGauge(pct), isPulseBeat ? "pink" : tone)
+	);
+}
+
+function headroomNote(headroom: number | null, pct: number): string {
+	if (headroom === null) return "";
+	if (headroom < 0) return ` ${color(`+${formatTokens(-headroom)}`, "red")}`;
+
+	return pct > HEADROOM_SHOWN_ABOVE_PCT ? ` ${color(`↓${formatTokens(headroom)}`, "dim")}` : "";
+}
+
+function contextChunk(d: StatuslineData, now: number, segments: SegmentConfig): Chunk[] {
+	const spec = GAUGE_SEGMENTS.contextGauge;
+	const pct = d.compactPct ?? d.contextPct;
+	if (pct === null || !isEnabled(segments, spec.id)) return [];
+
+	const gauge = gaugeHead("conv", pct, d.contextLevel, "sky", now);
+
+	return [
+		{
+			text: ` ${dot()} ${gauge}${headroomNote(d.compactHeadroom, pct)}`,
+			priority: priorityOf(segments, spec.id, spec.priority),
+		},
+	];
+}
+
+function identityCore(d: StatuslineData, dirName: string, branchName: string, now: number): string {
 	const mood = color(d.mood.face, d.mood.color);
-	const spark = d.celebrationMode ? gradientText(" ✨") : "";
+	const spark = d.celebrationMode ? gradientText(" ✨", driftOf(now)) : "";
 	const dir = color(dirName, "subtext");
 	const branch = color(branchName, "mauve") + (d.git.dirty ? color("*", "green") : "");
 	const insertions = d.git.insertions > 0 ? ` ${color(`+${d.git.insertions}`, "green")}` : "";
 	const deletions = d.git.deletions > 0 ? ` ${color(`-${d.git.deletions}`, "red")}` : "";
 	const contextBadge = /1M/.test(d.modelName) ? color(" 1M", "dim") : "";
 	const model = color(d.modelName.replace(/\s*\(.*?\)\s*$/, ""), "peach") + contextBadge;
-
 	const separator = dot();
 
-	return `${mood}${spark}  ${dir} ${separator}  ${branch}${insertions}${deletions} ${separator}  ${model}`;
+	return `${mood}${spark} ${dir} ${separator} ${branch}${insertions}${deletions} ${separator} ${model}`;
 }
 
 function renderIdentityLine(
@@ -67,24 +108,24 @@ function renderIdentityLine(
 	segments: SegmentConfig,
 	width: number,
 ): string {
-	const excess = visualWidth(identityCore(d, d.dirName, d.git.branch)) - width;
+	const excess = visualWidth(identityCore(d, d.dirName, d.git.branch, now)) - width;
 	const [dirName = d.dirName, branchName = d.git.branch] = shrinkToFit(
 		[d.dirName, d.git.branch],
 		excess,
 	);
 
 	return fitChunks(
-		identityCore(d, dirName, branchName),
-		optionalChunks(1, d, now, segments),
+		identityCore(d, dirName, branchName, now),
+		[...contextChunk(d, now, segments), ...optionalChunks(1, d, now, segments)],
 		width,
 	);
 }
 
-function costDisplay(cost: number): string {
+function costDisplay(cost: number, now: number): string {
 	const text = `${COST_ICON} ${formatCost(cost)}`;
 
 	return COST_MILESTONES.some((milestone) => cost >= milestone)
-		? gradientText(text)
+		? gradientText(text, driftOf(now))
 		: color(text, "teal");
 }
 
@@ -95,130 +136,166 @@ function renderEconomyLine(
 	width: number,
 ): string {
 	const duration = color(`(${formatDuration(d.sessionDurationMs)})`, "dim");
-	const core = `${costDisplay(d.sessionCost)} ${duration}`;
+	const core = `${costDisplay(d.sessionCost, now)} ${duration}`;
 
 	return fitChunks(core, optionalChunks(2, d, now, segments), width);
 }
 
-type Gauge = Pick<Part, "full" | "compact">;
-
-function contextGauge(d: StatuslineData): Gauge | null {
-	const pct = d.compactPct ?? d.contextPct;
-	if (pct === null) return null;
-
-	const tone = toneFor(pct, { calm: "sky", warnAbove: 65, criticalAbove: 85 });
-	const compact =
-		color(`${CONTEXT_ICON} conv ${formatPct(pct)}`, tone) + color(brailleGauge(pct), tone);
-	if (d.tokensToCompact === null || pct <= 60) return { compact, full: compact };
-
-	return { compact, full: `${compact} ${color(`↓${formatTokens(d.tokensToCompact)}`, "dim")}` };
+interface Cell {
+	text: string;
+	tone: ColorName;
 }
 
-const QUOTA_TONES = { warnAbove: 70, criticalAbove: 90 };
+type Column = "countdown" | "clock" | "pace" | "note";
 
-function quotaGauge(
-	label: string,
-	pct: number | null,
-	resetsAt: number | null,
-	calm: ColorName,
-	now: number,
-): Gauge | null {
-	if (pct === null) return null;
+const BLANK: Cell = { text: "", tone: "dim" };
+const COLUMN_SETS: readonly (readonly Column[])[] = [
+	["countdown", "clock", "pace", "note"],
+	["countdown", "pace", "note"],
+	["countdown", "note"],
+	["note"],
+	[],
+];
+const RIGHT_ALIGNED: readonly Column[] = ["pace"];
 
-	const tone = toneFor(pct, { calm, ...QUOTA_TONES });
-	const reset = formatReset(resetsAt, now);
-	const compact = color(`${label} ${formatPct(pct)}`, tone) + color(brailleGauge(pct), tone);
-
-	return { compact, full: reset ? `${compact} ${color(reset, "dim")}` : compact };
+interface QuotaRow {
+	label: string;
+	pct: number;
+	level: PressureLevel;
+	calm: ColorName;
+	cells: Record<Column, Cell>;
 }
 
-function renderGaugeLine(
+function paceTone(projectedPct: number): ColorName {
+	if (projectedPct > 100) return "red";
+
+	return projectedPct > PACE_WARN_ABOVE_PCT ? "peach" : "dim";
+}
+
+function paceCell(projectedPct: number | null): Cell {
+	if (projectedPct === null) return BLANK;
+
+	const shown = formatPct(Math.min(projectedPct, PACE_DISPLAY_CEILING));
+
+	return { text: `end ${shown}`, tone: paceTone(projectedPct) };
+}
+
+function limitCell(d: StatuslineData): Cell {
+	if (d.etaMinutes === 0) return { text: "⚠ limit reached", tone: "red" };
+	if (d.etaMinutes !== null) {
+		return { text: `⚠ limit in ${formatDuration(d.etaMinutes * 60_000)}`, tone: "red" };
+	}
+
+	return d.etaCooling ? { text: "↓ cooling", tone: "green" } : BLANK;
+}
+
+function quotaRows(d: StatuslineData, segments: SegmentConfig, now: number): QuotaRow[] {
+	const showPace = isEnabled(segments, PACE_SEGMENT.id);
+	const quotas = [
+		{
+			spec: GAUGE_SEGMENTS.fiveHourGauge,
+			label: "5h",
+			pct: d.fiveHourPct,
+			level: d.fiveHourLevel,
+			projectedPct: d.fiveHourProjectedPct,
+			resetsAt: d.fiveHourResetsAt,
+			calm: "sky" as const,
+			note: limitCell(d),
+		},
+		{
+			spec: GAUGE_SEGMENTS.sevenDayGauge,
+			label: "7d",
+			pct: d.sevenDayPct,
+			level: d.sevenDayLevel,
+			projectedPct: d.sevenDayProjectedPct,
+			resetsAt: d.sevenDayResetsAt,
+			calm: "lavender" as const,
+			note: BLANK,
+		},
+	];
+
+	return quotas.flatMap(({ spec, label, pct, level, projectedPct, resetsAt, calm, note }) => {
+		if (pct === null || !isEnabled(segments, spec.id)) return [];
+
+		const reset = resetOf(resetsAt, now);
+		const cells = {
+			countdown: reset ? { text: reset.countdown, tone: "dim" as const } : BLANK,
+			clock: reset ? { text: reset.clock, tone: "dim" as const } : BLANK,
+			pace: showPace ? paceCell(projectedPct) : BLANK,
+			note,
+		};
+
+		return [{ label, pct, level, calm, cells }];
+	});
+}
+
+function padCell(text: string, width: number, column: Column): string {
+	const padding = " ".repeat(Math.max(0, width - visualWidth(text)));
+
+	return RIGHT_ALIGNED.includes(column) ? padding + text : text + padding;
+}
+
+function quotaTable(rows: QuotaRow[], columns: readonly Column[], now: number): string[] {
+	const filled = columns.filter((column) => rows.some((row) => row.cells[column].text !== ""));
+	const widthOf = (column: Column) =>
+		Math.max(...rows.map((row) => visualWidth(row.cells[column].text)));
+	const pctWidth = Math.max(...rows.map((row) => formatPct(row.pct).length));
+
+	return rows.map((row, index) => {
+		const prefix = index === 0 ? `${MELON} ` : ROW_INDENT;
+		const head = gaugeHead(row.label, row.pct, row.level, row.calm, now, pctWidth);
+		const lastFilled = filled.findLastIndex((column) => row.cells[column].text !== "");
+		const cells = filled.slice(0, lastFilled + 1).map((column, position) => {
+			const cell = row.cells[column];
+			const padded = padCell(cell.text, widthOf(column), column);
+
+			return ` ${color(position === lastFilled ? padded.trimEnd() : padded, cell.tone)}`;
+		});
+
+		return prefix + head + cells.join("");
+	});
+}
+
+function quotaLine(rows: QuotaRow[], now: number): string {
+	const quotas = rows.map((row) => {
+		const head = gaugeHead(row.label, row.pct, row.level, row.calm, now);
+		const cells = Object.values(row.cells)
+			.filter((cell) => cell.text !== "")
+			.map((cell) => ` ${color(cell.text, cell.tone)}`);
+
+		return head + cells.join("");
+	});
+
+	return `${MELON} ${quotas.join(` ${dot()} `)}`;
+}
+
+function renderQuotaLines(
 	d: StatuslineData,
 	now: number,
 	segments: SegmentConfig,
 	width: number,
-): string {
-	const candidates = [
-		{ id: "contextGauge", priority: 30, gauge: contextGauge(d) },
-		{
-			id: "fiveHourGauge",
-			priority: 20,
-			gauge: quotaGauge("5h", d.fiveHourPct, d.fiveHourResetsAt, "sky", now),
-		},
-		{
-			id: "sevenDayGauge",
-			priority: 40,
-			gauge: quotaGauge("7d", d.sevenDayPct, d.sevenDayResetsAt, "lavender", now),
-		},
-	];
-	const gauges = candidates.flatMap(({ id, priority, gauge }): Part[] =>
-		gauge && isEnabled(segments, id)
-			? [{ ...gauge, priority: priorityOf(segments, id, priority) }]
-			: [],
-	);
-	if (gauges.length === 0) return color(`${MELON} gauges unavailable`, "dim");
+): string[] {
+	const rows = quotaRows(d, segments, now);
+	if (rows.length === 0) return [color(`${MELON} quotas unavailable`, "dim")];
 
-	return fitParts(`${MELON} `, gauges, `  ${dot()}  `, width);
-}
+	const line = quotaLine(rows, now);
+	if (visualWidth(line) <= width) return [line];
 
-function compactionAlert(d: StatuslineData): Part | null {
-	if (d.contextTokens === null) return null;
+	const layouts = COLUMN_SETS.map((columns) => quotaTable(rows, columns, now));
+	const fitting = layouts.find((lines) => lines.every((line) => visualWidth(line) <= width));
 
-	const inContext = `${formatTokens(d.contextTokens)} in ctx`;
-	if (d.tokensToCompact === null) return { full: color(inContext, "red"), priority: 20 };
-
-	const countdown = `compact in ${formatTokens(d.tokensToCompact)}`;
-
-	return {
-		full: color(`${countdown} (${inContext})`, "red"),
-		compact: color(countdown, "red"),
-		priority: 20,
-	};
-}
-
-function cacheAlert(d: StatuslineData): Part | null {
-	if (d.cacheHitPct === null || d.cacheHitPct >= CACHE_ALERT_PCT) return null;
-
-	const rate = `cache ${formatPct(d.cacheHitPct)}`;
-
-	return {
-		full: color(`${rate}, context costs full price`, "red"),
-		compact: color(rate, "red"),
-		priority: 10,
-	};
-}
-
-function quotaAlert(d: StatuslineData): Part | null {
-	if (d.etaMinutes === 0) return { full: color("⚠ AT LIMIT", "red"), priority: 30 };
-	if (d.etaMinutes !== null) {
-		return { full: color(`⚠ limit in ${d.etaMinutes}min`, "red"), priority: 30 };
-	}
-
-	return d.etaCooling ? { full: color("↓ cooling", "green"), priority: 30 } : null;
-}
-
-function renderAlertLine(d: StatuslineData, width: number): string | null {
-	const alerts = [compactionAlert(d), cacheAlert(d), quotaAlert(d)].filter(
-		(alert): alert is Part => alert !== null,
-	);
-	if (alerts.length === 0) return null;
-
-	return fitParts("", alerts, ` ${dot()} `, width);
+	return fitting ?? layouts[layouts.length - 1] ?? [];
 }
 
 export function render(
 	d: StatuslineData,
 	segments: SegmentConfig = {},
 	width: number = resolveWidth(),
+	now: number = Date.now(),
 ): string {
-	const now = Date.now();
-	const lines = [
+	return [
 		renderIdentityLine(d, now, segments, width),
 		renderEconomyLine(d, now, segments, width),
-		renderGaugeLine(d, now, segments, width),
-	];
-	const alertLine = d.alertMode ? renderAlertLine(d, width) : null;
-	if (alertLine !== null) lines.push(alertLine);
-
-	return lines.join("\n");
+		...renderQuotaLines(d, now, segments, width),
+	].join("\n");
 }

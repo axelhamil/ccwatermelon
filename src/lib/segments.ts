@@ -12,12 +12,17 @@ export type SegmentConfig = Record<string, SegmentToggle>;
 
 type Line = 1 | 2;
 
-interface OptionalSegment {
+export interface SegmentSpec {
 	id: string;
-	line: Line;
-	priority: number;
+	line: Line | 3;
+	priority?: number;
 	relocatable?: boolean;
 	disabledByDefault?: boolean;
+}
+
+interface OptionalSegment extends SegmentSpec {
+	line: Line;
+	priority: number;
 	text: (d: StatuslineData, now: number) => string | null;
 }
 
@@ -25,7 +30,7 @@ export function dot(): string {
 	return color("·", "dim");
 }
 
-export const CACHE_ALERT_PCT = 70;
+const CACHE_ALERT_PCT = 70;
 
 const FIRE = "🔥";
 const LINES_ICON = "\u{f0176}";
@@ -46,6 +51,17 @@ function linesChanged(d: StatuslineData): string | null {
 	const removed = d.linesRemoved > 0 ? color(`-${d.linesRemoved}`, "red") : "";
 
 	return ` ${dot()} ${color(LINES_ICON, "dim")}${added}${removed}`;
+}
+
+function scopedCost(scope: string, cost: number): string {
+	return ` ${dot()} ${color(`${scope} ${formatCost(cost)}`, "subtext")}`;
+}
+
+function projectToday(d: StatuslineData): string | null {
+	const shown = formatCost(d.projectTodayCost);
+	const repeatsNeighbour = shown === formatCost(d.sessionCost) || shown === formatCost(d.todayCost);
+
+	return d.projectTodayCost > 0 && !repeatsNeighbour ? scopedCost("P", d.projectTodayCost) : null;
 }
 
 const OPTIONAL_SEGMENTS: readonly OptionalSegment[] = [
@@ -107,19 +123,18 @@ const OPTIONAL_SEGMENTS: readonly OptionalSegment[] = [
 		priority: 10,
 		text: (d) => (d.activeSessions > 1 ? ` ${color(`[${d.activeSessions}]`, "lavender")}` : null),
 	},
+	{ id: "projectToday", line: 2, priority: 28, text: projectToday },
 	{
 		id: "today",
 		line: 2,
 		priority: 30,
-		text: (d) =>
-			d.todayCost > 0 ? ` ${FIRE} ${color(`D ${formatCost(d.todayCost)}`, "subtext")}` : null,
+		text: (d) => (d.todayCost > 0 ? scopedCost("D", d.todayCost) : null),
 	},
 	{
 		id: "week",
 		line: 2,
 		priority: 25,
-		text: (d) =>
-			d.weekCost > 0 ? ` ${FIRE} ${color(`W ${formatCost(d.weekCost)}`, "subtext")}` : null,
+		text: (d) => (d.weekCost > 0 ? scopedCost("W", d.weekCost) : null),
 	},
 	{
 		id: "burn",
@@ -127,7 +142,7 @@ const OPTIONAL_SEGMENTS: readonly OptionalSegment[] = [
 		priority: 50,
 		text: (d) =>
 			d.burnRatePerHr !== null && d.burnRatePerHr > BURN_ALERT_PER_HR
-				? ` ${FIRE} ${color(`${formatCost(d.burnRatePerHr)}/hr`, "red")}`
+				? ` ${dot()} ${FIRE} ${color(`${formatCost(d.burnRatePerHr)}/hr`, "red")}`
 				: null,
 	},
 	{
@@ -141,13 +156,19 @@ const OPTIONAL_SEGMENTS: readonly OptionalSegment[] = [
 	},
 ];
 
-const GAUGE_SEGMENT_IDS = ["contextGauge", "fiveHourGauge", "sevenDayGauge"] as const;
+export const GAUGE_SEGMENTS = {
+	contextGauge: { id: "contextGauge", line: 1, priority: 30 },
+	fiveHourGauge: { id: "fiveHourGauge", line: 3 },
+	sevenDayGauge: { id: "sevenDayGauge", line: 3 },
+} as const satisfies Record<string, SegmentSpec>;
 
-export const RELOCATABLE_SEGMENT_IDS = OPTIONAL_SEGMENTS.filter((s) => s.relocatable).map(
-	(s) => s.id,
-);
+export const PACE_SEGMENT: SegmentSpec = { id: "pace", line: 3 };
 
-export const SEGMENT_IDS = [...OPTIONAL_SEGMENTS.map((s) => s.id), ...GAUGE_SEGMENT_IDS];
+export const SEGMENT_SPECS: readonly SegmentSpec[] = [
+	...OPTIONAL_SEGMENTS,
+	...Object.values(GAUGE_SEGMENTS),
+	PACE_SEGMENT,
+];
 
 export function isEnabled(config: SegmentConfig, id: string, disabledByDefault = false): boolean {
 	return config[id]?.enabled ?? !disabledByDefault;

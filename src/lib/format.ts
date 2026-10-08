@@ -86,32 +86,33 @@ function gradientStops(): readonly Rgb[] {
 	];
 }
 
-export function gradientText(text: string): string {
+export function gradientText(text: string, drift = 0): string {
 	const chars = [...text];
-	const span = Math.max(1, chars.length - 1);
 	const stops = gradientStops();
-	const last = stops.length - 1;
+	const span = Math.max(1, chars.length - 1);
+	const stopAt = (index: number) => stops[index % stops.length] ?? PALETTE.text;
 
 	return chars
 		.map((ch, i) => {
 			if (ch === " ") return ch;
-			const pos = (i / span) * last;
-			const from = Math.min(last, Math.floor(pos));
-			const to = Math.min(last, from + 1);
-			const a = stops[from] ?? PALETTE.text;
-			const b = stops[to] ?? PALETTE.text;
-			return colorRgb(ch, lerpColor(pos - from, a, b));
+
+			const position = (i / span) * (stops.length - 1) + drift;
+			const from = Math.floor(position);
+
+			return colorRgb(ch, lerpColor(position - from, stopAt(from), stopAt(from + 1)));
 		})
 		.join("");
 }
 
 const COST_DISPLAY_CEILING = 999_999;
+const WHOLE_DOLLARS_FROM = 99.95;
 
 export function formatCost(usd: number): string {
 	const safe = Number.isFinite(usd) ? Math.min(Math.max(usd, 0), COST_DISPLAY_CEILING) : 0;
 	if (safe === 0) return "$0.00";
 	if (safe < 10) return `$${safe.toFixed(2)}`;
 	if (safe >= COST_DISPLAY_CEILING) return `$${COST_DISPLAY_CEILING}+`;
+	if (safe >= WHOLE_DOLLARS_FROM) return `$${Math.round(safe)}`;
 	return `$${safe.toFixed(1)}`;
 }
 

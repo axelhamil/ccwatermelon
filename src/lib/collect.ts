@@ -7,7 +7,9 @@ import { getGitStatus } from "./git";
 import { History } from "./history";
 import { resolveLimits } from "./limits";
 import { classifyMood } from "./mood";
+import { FIVE_HOUR_WINDOW_SEC, projectedAtReset, SEVEN_DAY_WINDOW_SEC } from "./pace";
 import type { Payload } from "./payload";
+import { pressureLevel } from "./pressure";
 import { sanitizeLabel, sanitizeOptionalLabel } from "./sanitize";
 import type { GitStatus, StatuslineData, UsageLimits } from "./types";
 import type { ResolvedConfig } from "./userConfig";
@@ -17,12 +19,22 @@ const NO_GIT: GitStatus = { branch: "no-git", dirty: false, insertions: 0, delet
 
 type ContextUsage = Pick<
 	StatuslineData,
-	"contextPct" | "contextTokens" | "cacheHitPct" | "compactPct" | "tokensToCompact"
+	"contextPct" | "cacheHitPct" | "compactPct" | "compactHeadroom"
+>;
+
+type Quotas = Pick<
+	StatuslineData,
+	| "fiveHourPct"
+	| "fiveHourResetsAt"
+	| "fiveHourProjectedPct"
+	| "sevenDayPct"
+	| "sevenDayResetsAt"
+	| "sevenDayProjectedPct"
 >;
 
 type Ledger = Pick<
 	StatuslineData,
-	"todayCost" | "weekCost" | "burnRatePerHr" | "activeSessions"
+	"projectTodayCost" | "todayCost" | "weekCost" | "burnRatePerHr" | "activeSessions"
 > & {
 	fiveHourEta: ReturnType<typeof forecastEta>;
 };
@@ -45,17 +57,42 @@ function contextUsage(window: Payload["context_window"], reserveRatio: number): 
 	const threshold = compactThreshold(windowSize, reserveRatio);
 	const pressure =
 		contextTokens === null || threshold === null
-			? { compactPct: null, tokensToCompact: null }
+			? { compactPct: null, compactHeadroom: null }
 			: {
 					compactPct: Math.round((contextTokens / threshold) * 100),
-					tokensToCompact: Math.max(0, threshold - contextTokens),
+					compactHeadroom: threshold - contextTokens,
 				};
 
 	return {
-		contextTokens,
 		contextPct: window?.used_percentage ?? measuredPct,
 		cacheHitPct: contextTokens ? Math.round((cachedTokens / contextTokens) * 100) : null,
 		...pressure,
+	};
+}
+
+function quotasOf(limits: UsageLimits, now: number): Quotas {
+	const fiveHourPct = limits.five_hour?.utilization ?? null;
+	const fiveHourResetsAt = limits.five_hour?.resets_at ?? null;
+	const sevenDayPct = limits.seven_day?.utilization ?? null;
+	const sevenDayResetsAt = limits.seven_day?.resets_at ?? null;
+
+	return {
+		fiveHourPct,
+		fiveHourResetsAt,
+		fiveHourProjectedPct: projectedAtReset(
+			fiveHourPct,
+			fiveHourResetsAt,
+			FIVE_HOUR_WINDOW_SEC,
+			now,
+		),
+		sevenDayPct,
+		sevenDayResetsAt,
+		sevenDayProjectedPct: projectedAtReset(
+			sevenDayPct,
+			sevenDayResetsAt,
+			SEVEN_DAY_WINDOW_SEC,
+			now,
+		),
 	};
 }
 
@@ -73,12 +110,13 @@ function updateLedger(session: Session, fiveHourPct: number | null, now: number)
 
 		if (session.cost !== null) {
 			history.record(costMetric, session.cost, minute);
-			history.recordSessionCost(session.id, session.cost, now);
+			history.recordSessionCost(session.id, session.project, session.cost, now);
 		}
 		history.touchSession(session.id, session.project, now);
 		if (fiveHourPct !== null) history.record(FIVE_HOUR_METRIC, fiveHourPct, minute);
 
 		return {
+			projectTodayCost: history.projectCostToday(session.project, now),
 			todayCost: history.costToday(now),
 			weekCost: history.costOverDays(7, now),
 			burnRatePerHr: burnRate(history.samplesSince(costMetric, windowStart)),
@@ -93,19 +131,16 @@ function updateLedger(session: Session, fiveHourPct: number | null, now: number)
 	}
 }
 
-function isAlerting(
-	pressurePct: number | null,
-	limits: UsageLimits,
-	thresholds: ResolvedConfig["thresholds"],
-): boolean {
-	const exceeds = (pct: number | null | undefined, threshold: number) =>
-		pct !== null && pct !== undefined && pct > threshold;
+function minutesToLimit(
+	eta: Ledger["fiveHourEta"],
+	resetsAt: number | null,
+	now: number,
+): number | null {
+	if (eta.minutes === null || resetsAt === null) return null;
 
-	return (
-		exceeds(pressurePct, thresholds.compactAlert) ||
-		exceeds(limits.five_hour?.utilization, thresholds.fiveHourAlert) ||
-		exceeds(limits.seven_day?.utilization, thresholds.sevenDayAlert)
-	);
+	const minutesToReset = (resetsAt - now) / 60;
+
+	return eta.minutes < minutesToReset ? eta.minutes : null;
 }
 
 function outputStyle(payload: Payload): string | null {
@@ -120,11 +155,16 @@ export async function collectStatuslineData(
 	cwd: string,
 ): Promise<StatuslineData> {
 	const now = Math.floor(Date.now() / 1000);
-	const limits = resolveLimits(payload.rate_limits, now);
-	const fiveHourPct = limits.five_hour?.utilization ?? null;
-	const sevenDayPct = limits.seven_day?.utilization ?? null;
-	const context = contextUsage(payload.context_window, config.thresholds.compactionReserveRatio);
+	const { thresholds } = config;
+	const quotas = quotasOf(resolveLimits(payload.rate_limits, now), now);
+	const context = contextUsage(payload.context_window, thresholds.compactionReserveRatio);
 	const pressurePct = context.compactPct ?? context.contextPct;
+	const contextLevel = pressureLevel(pressurePct, thresholds.compactAlert);
+	const fiveHourLevel = pressureLevel(quotas.fiveHourPct, thresholds.fiveHourAlert);
+	const sevenDayLevel = pressureLevel(quotas.sevenDayPct, thresholds.sevenDayAlert);
+	const levels = [contextLevel, fiveHourLevel, sevenDayLevel];
+	const isFiveHourTense = fiveHourLevel !== "calm";
+
 	const reportedCost = payload.cost?.total_cost_usd ?? null;
 	const sessionCost = reportedCost ?? 0;
 	const session: Session = {
@@ -132,28 +172,33 @@ export async function collectStatuslineData(
 		project: payload.workspace?.project_dir ?? cwd,
 		cost: reportedCost,
 	};
-	const { fiveHourEta, ...ledger } = updateLedger(session, fiveHourPct, now);
+	const { fiveHourEta, ...ledger } = updateLedger(session, quotas.fiveHourPct, now);
+
 	const git = await getGitStatus(cwd);
-	const mood = classifyMood({ contextPct: pressurePct, sessionCost, fiveHourPct, sevenDayPct });
-	const alertMode = isAlerting(pressurePct, limits, config.thresholds);
+	const mood = classifyMood({
+		levels,
+		contextPct: pressurePct,
+		sessionCost,
+		fiveHourPct: quotas.fiveHourPct,
+		sevenDayPct: quotas.sevenDayPct,
+	});
 	const worktree = payload.workspace?.git_worktree;
 
 	return {
 		...context,
+		...quotas,
 		...ledger,
+		contextLevel,
+		fiveHourLevel,
+		sevenDayLevel,
 		mood,
 		git: git ? { ...git, branch: sanitizeLabel(git.branch) } : NO_GIT,
 		modelName: sanitizeOptionalLabel(payload.model?.display_name) ?? "?",
 		dirName: sanitizeLabel(basename(cwd)),
 		sessionCost,
 		sessionDurationMs: payload.cost?.total_duration_ms ?? 0,
-		fiveHourPct,
-		fiveHourResetsAt: limits.five_hour?.resets_at ?? null,
-		sevenDayPct,
-		sevenDayResetsAt: limits.seven_day?.resets_at ?? null,
-		etaMinutes: alertMode ? fiveHourEta.minutes : null,
-		etaCooling: alertMode && fiveHourEta.cooling,
-		alertMode,
+		etaMinutes: isFiveHourTense ? minutesToLimit(fiveHourEta, quotas.fiveHourResetsAt, now) : null,
+		etaCooling: isFiveHourTense && fiveHourEta.cooling,
 		celebrationMode: mood.kind === "rose",
 		sessionName: sanitizeOptionalLabel(payload.session_name),
 		ccVersion: sanitizeOptionalLabel(payload.version),

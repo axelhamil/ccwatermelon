@@ -1,4 +1,5 @@
 import type { ColorName } from "./format";
+import type { PressureLevel } from "./pressure";
 
 type MoodKind = "rose" | "zen" | "focus" | "stressed" | "panic";
 
@@ -39,19 +40,24 @@ export interface StatuslineData {
 
 	sessionCost: number;
 	sessionDurationMs: number;
+	projectTodayCost: number;
 	todayCost: number;
 	weekCost: number;
 
 	contextPct: number | null;
-	contextTokens: number | null;
 	compactPct: number | null;
-	tokensToCompact: number | null;
+	compactHeadroom: number | null;
+	contextLevel: PressureLevel;
 
 	fiveHourPct: number | null;
 	fiveHourResetsAt: number | null;
+	fiveHourProjectedPct: number | null;
+	fiveHourLevel: PressureLevel;
 
 	sevenDayPct: number | null;
 	sevenDayResetsAt: number | null;
+	sevenDayProjectedPct: number | null;
+	sevenDayLevel: PressureLevel;
 
 	cacheHitPct: number | null;
 
@@ -59,7 +65,6 @@ export interface StatuslineData {
 	etaMinutes: number | null;
 	etaCooling: boolean;
 
-	alertMode: boolean;
 	celebrationMode: boolean;
 
 	sessionName: string | null;

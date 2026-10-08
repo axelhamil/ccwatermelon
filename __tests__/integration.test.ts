@@ -50,10 +50,10 @@ describe("integration", () => {
 		expect(out).toContain("(=ᴥ=)");
 	});
 
-	test("alert-context renders 4 lines", async () => {
+	test("alert-context renders 3 lines", async () => {
 		const out = await runFixture("alert-context.json");
 		const lines = out.split("\n").filter((l) => l.trim().length > 0);
-		expect(lines.length).toBe(4);
+		expect(lines.length).toBe(3);
 		expect(out).toContain("(◉_◉)");
 	});
 
