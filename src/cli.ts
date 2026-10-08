@@ -1,184 +1,208 @@
 #!/usr/bin/env bun
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import * as readline from "node:readline/promises";
-import { applyPaletteOverrides, color, THEMES } from "./lib/format";
-import { render } from "./lib/render";
-import type { SegmentToggle } from "./lib/segments";
-import { RELOCATABLE_SEGMENT_IDS, SEGMENT_IDS } from "./lib/segments";
-import type { StatuslineData } from "./lib/types";
-import type { ConfigFile } from "./lib/userConfig";
-import { defaultConfig, mergeConfig, readConfigFile, userConfigPath } from "./lib/userConfig";
+import type { EditorKey, EditorState } from "./lib/editor";
+import { applyKey, ROWS, splitKeys, thresholdOf } from "./lib/editor";
+import type { Motion } from "./lib/editorView";
+import { drawEditor, isAnimating, isSaveToastOver } from "./lib/editorView";
+import { readConfigFile, userConfigPath } from "./lib/userConfig";
 
 const CONFIG_PATH = userConfigPath();
-const PREVIEW_WIDTH = 110;
-const RULE = "─".repeat(53);
-const THRESHOLD_KEYS = ["compactAlert", "fiveHourAlert", "sevenDayAlert"] as const;
-const NOW_SEC = Math.floor(Date.now() / 1000);
+const FRAME_MS = 33;
+const ENTER_SCREEN = "\x1b[?1049h\x1b[?25l";
+const LEAVE_SCREEN = "\x1b[?25h\x1b[?1049l";
+const CTRL_C = "\x03";
+const FALLBACK_VIEWPORT = { columns: 80, rows: 24 };
+const STOP_SIGNALS = ["SIGTERM", "SIGHUP"] as const;
 
-const SAMPLE: StatuslineData = {
-	mood: { kind: "focus", face: "(•‿•)", color: "yellow" },
-	git: { branch: "feat/melon-config", dirty: true, insertions: 142, deletions: 38 },
-	modelName: "Opus 4.7",
-	dirName: "ccwatermelon",
-	activeSessions: 2,
-	sessionCost: 3.42,
-	sessionDurationMs: 18 * 60_000,
-	todayCost: 95.9,
-	weekCost: 95.9,
-	contextPct: 55,
-	contextTokens: 110_000,
-	compactPct: 55,
-	tokensToCompact: 74_000,
-	fiveHourPct: 20,
-	fiveHourResetsAt: NOW_SEC + 3 * 3600 + 22 * 60,
-	sevenDayPct: 23,
-	sevenDayResetsAt: NOW_SEC + 107 * 3600 + 18 * 60,
-	cacheHitPct: 41,
-	burnRatePerHr: null,
-	etaMinutes: null,
-	etaCooling: false,
-	alertMode: false,
-	celebrationMode: false,
-	sessionName: "melon-config-session",
-	ccVersion: "2.1.0",
-	outputStyle: null,
-	worktree: null,
-	linesAdded: 142,
-	linesRemoved: 38,
-	vimMode: null,
-	agentName: null,
+class SaveFailure extends Error {}
+
+function reasonOf(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+const EDITOR_KEYS: Record<string, EditorKey> = {
+	"\x1b[A": "up",
+	"\x1b[B": "down",
+	"\x1b[C": "right",
+	"\x1b[D": "left",
+	k: "up",
+	j: "down",
+	"]": "bigRight",
+	"[": "bigLeft",
+	" ": "toggle",
+	l: "line",
+	r: "reset",
 };
 
-type Editor = (rl: readline.Interface, file: ConfigFile) => Promise<void>;
-type Outcome = "continue" | "save" | "discard";
-
-function loadWorkingConfig(): ConfigFile | null {
+function loadState(): EditorState | null {
 	const { data, error } = readConfigFile(CONFIG_PATH);
-	if (!error) return data ?? {};
+	if (!error) return { file: data ?? {}, cursor: 0, dirty: false };
 
 	console.error(`the existing config is invalid, fix or delete it before editing: ${error}`);
+
 	return null;
 }
 
-function printPreview(file: ConfigFile): void {
-	const resolved = mergeConfig(defaultConfig(), file);
-	applyPaletteOverrides(resolved.colors, resolved.theme);
-
-	console.log(`\n${color(`── preview ${RULE}`, "dim")}`);
-	console.log(render(SAMPLE, resolved.segments, PREVIEW_WIDTH));
-	console.log(`${color(RULE, "dim")}\n`);
-}
-
-async function pickSegment(rl: readline.Interface, ids: readonly string[]): Promise<string | null> {
-	console.log(ids.map((id, i) => `  ${i + 1}. ${id}`).join("\n"));
-	const answer = await rl.question("segment #: ");
-
-	return ids[Number.parseInt(answer, 10) - 1] ?? null;
-}
-
-function patchSegment(file: ConfigFile, id: string, patch: SegmentToggle): void {
-	file.segments = { ...file.segments, [id]: { ...file.segments?.[id], ...patch } };
-}
-
-const editThresholds: Editor = async (rl, file) => {
-	const thresholds = { ...file.thresholds };
-
-	for (const key of THRESHOLD_KEYS) {
-		const current = thresholds[key] ?? defaultConfig().thresholds[key];
-		const answer = (await rl.question(`${key} [${current}] : `)).trim();
-		const value = Number.parseFloat(answer);
-		if (!answer) continue;
-
-		if (Number.isFinite(value) && value >= 0 && value <= 100) thresholds[key] = value;
-		else console.log(`${key} unchanged: "${answer}" is not a number between 0 and 100`);
+function save(state: EditorState): void {
+	try {
+		mkdirSync(dirname(CONFIG_PATH), { recursive: true });
+		writeFileSync(CONFIG_PATH, JSON.stringify(state.file, null, 2), "utf-8");
+	} catch (error) {
+		throw new SaveFailure(
+			`could not write ${CONFIG_PATH} (${reasonOf(error)}), your changes were not saved. Check that its folder exists and is writable, then run the editor again`,
+		);
 	}
+}
 
-	file.thresholds = thresholds;
-};
+function moveKnob(motion: Motion, before: EditorState, after: EditorState, now: number): void {
+	const row = ROWS[before.cursor];
+	if (row?.kind !== "threshold" || motion.reduced) return;
 
-const toggleSegment: Editor = async (rl, file) => {
-	const id = await pickSegment(rl, SEGMENT_IDS);
-	if (!id) return;
+	const from = thresholdOf(before.file, row.key);
+	const to = thresholdOf(after.file, row.key);
+	if (from !== to) motion.knobs[row.key] = { from, to, startedAt: now };
+}
 
-	const answer = (await rl.question(`enable ${id}? (y/n) : `)).trim().toLowerCase();
-	patchSegment(file, id, { enabled: answer === "y" });
-};
+function runEditor(initial: EditorState): Promise<void> {
+	const { stdin, stdout } = process;
+	const motion: Motion = {
+		knobs: {},
+		widthDemoStartedAt: null,
+		pressureDemoStartedAt: null,
+		savedAt: null,
+		quitArmed: false,
+		reduced: Boolean(process.env.NO_MOTION),
+	};
+	let state = initial;
+	let ticker: ReturnType<typeof setInterval> | null = null;
+	let closed = false;
 
-const editPriority: Editor = async (rl, file) => {
-	const id = await pickSegment(rl, SEGMENT_IDS);
-	if (!id) return;
+	return new Promise((resolve, reject) => {
+		const close = () => {
+			if (closed) return;
 
-	const priority = Number.parseFloat(
-		await rl.question("priority (number, higher = disappears last): "),
-	);
-	if (Number.isFinite(priority)) patchSegment(file, id, { priority });
-	else console.log(`${id} unchanged: the priority must be a number`);
-};
+			closed = true;
+			if (ticker) clearInterval(ticker);
+			stdin.off("data", onData);
+			stdout.off("resize", onResize);
+			for (const signal of STOP_SIGNALS) process.off(signal, onSignal);
+			stdout.write(LEAVE_SCREEN);
+			stdin.setRawMode(false);
+			stdin.pause();
+		};
 
-const relocateSegment: Editor = async (rl, file) => {
-	const id = await pickSegment(rl, RELOCATABLE_SEGMENT_IDS);
-	if (!id) return;
+		const quit = () => {
+			close();
+			resolve();
+		};
 
-	const line = (await rl.question("line (1 or 2): ")).trim();
-	if (line === "1" || line === "2") patchSegment(file, id, { line: line === "1" ? 1 : 2 });
-	else console.log(`${id} unchanged: the line must be 1 or 2`);
-};
+		const safely = (run: () => void) => {
+			if (closed) return;
 
-const editTheme: Editor = async (rl, file) => {
-	const names = Object.keys(THEMES) as (keyof typeof THEMES)[];
-	const answer = (await rl.question(`theme (${names.join(" or ")}): `)).trim();
-	const theme = names.find((name) => name === answer);
-	if (theme) file.theme = theme;
-	else console.log(`theme unchanged: "${answer}" is not one of ${names.join(", ")}`);
-};
+			try {
+				run();
+			} catch (error) {
+				close();
+				reject(error);
+			}
+		};
 
-const EDITORS: Record<string, { label: string; edit: Editor }> = {
-	"1": { label: "Alert thresholds", edit: editThresholds },
-	"2": { label: "Enable/disable a segment", edit: toggleSegment },
-	"3": { label: "Segment priority (drop order under reduced width)", edit: editPriority },
-	"4": { label: "Line for a relocatable segment (1=identity, 2=economy)", edit: relocateSegment },
-	"5": { label: "Theme", edit: editTheme },
-};
+		const paint = () => {
+			const now = Date.now();
+			const viewport = {
+				columns: stdout.columns || FALLBACK_VIEWPORT.columns,
+				rows: stdout.rows || FALLBACK_VIEWPORT.rows,
+			};
+			const lines = drawEditor(state, motion, now, viewport, CONFIG_PATH);
 
-async function menu(rl: readline.Interface, file: ConfigFile): Promise<Outcome> {
-	printPreview(file);
-	for (const [key, { label }] of Object.entries(EDITORS)) console.log(`${key}) ${label}`);
-	console.log("s) Save and exit");
-	console.log("q) Exit without saving");
+			stdout.write(`\x1b[H${lines.map((line) => `\x1b[2K${line}`).join("\n")}\x1b[J`);
+			if (isSaveToastOver(motion, now)) return quit();
+			if (isAnimating(motion, now) || !ticker) return;
 
-	const choice = (await rl.question("> ")).trim().toLowerCase();
-	if (choice === "s") return "save";
-	if (choice === "q") return "discard";
+			clearInterval(ticker);
+			ticker = null;
+		};
 
-	await EDITORS[choice]?.edit(rl, file);
+		const animate = () => {
+			ticker ??= setInterval(() => safely(paint), FRAME_MS);
+			paint();
+		};
 
-	return "continue";
+		const onKey = (key: string) => {
+			if (key === CTRL_C) return quit();
+			if (motion.savedAt !== null) return;
+
+			const now = Date.now();
+			const wasArmed = motion.quitArmed;
+			motion.quitArmed = false;
+
+			if (key === "q" && (!state.dirty || wasArmed)) return quit();
+			if (key === "q") motion.quitArmed = true;
+			if (key === "w" && !motion.reduced) motion.widthDemoStartedAt = now;
+			if (key === "p" && !motion.reduced) motion.pressureDemoStartedAt = now;
+			if (key === "s") {
+				if (state.dirty) save(state);
+				motion.savedAt = now;
+			}
+
+			const action = EDITOR_KEYS[key];
+			if (action) {
+				const next = applyKey(state, action);
+				moveKnob(motion, state, next, now);
+				state = next;
+			}
+
+			animate();
+		};
+
+		const onData = (chunk: string) => {
+			for (const key of splitKeys(chunk)) safely(() => onKey(key));
+		};
+
+		const onResize = () => safely(paint);
+
+		const onSignal = () => {
+			close();
+			process.exitCode = 1;
+			resolve();
+		};
+
+		safely(() => {
+			for (const signal of STOP_SIGNALS) process.on(signal, onSignal);
+			stdout.write(ENTER_SCREEN);
+			stdin.setRawMode(true);
+			stdin.setEncoding("utf-8");
+			stdin.resume();
+			stdin.on("data", onData);
+			stdout.on("resize", onResize);
+			paint();
+		});
+	});
 }
 
 async function main(): Promise<void> {
-	const file = loadWorkingConfig();
-	if (!file) {
+	if (!process.stdin.isTTY || !process.stdout.isTTY) {
+		console.error("ccwatermelon-config needs an interactive terminal, run it directly in one");
 		process.exitCode = 1;
 		return;
 	}
 
-	const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+	const state = loadState();
+	if (!state) {
+		process.exitCode = 1;
+		return;
+	}
 
-	console.log(color("ccwatermelon, interactive config", "peach"));
-	console.log(color(`file: ${CONFIG_PATH}`, "dim"));
-
-	let outcome: Outcome = "continue";
-	while (outcome === "continue") outcome = await menu(rl, file);
-	rl.close();
-	if (outcome === "discard") return;
-
-	mkdirSync(dirname(CONFIG_PATH), { recursive: true });
-	writeFileSync(CONFIG_PATH, JSON.stringify(file, null, 2), "utf-8");
-	console.log(color(`config saved: ${CONFIG_PATH}`, "green"));
+	await runEditor(state);
 }
 
-main().catch((err) => {
-	console.error(`ccwatermelon-config stopped, nothing was saved: ${err}`);
+main().catch((error) => {
+	const failure =
+		error instanceof SaveFailure
+			? error.message
+			: `unexpected error (${reasonOf(error)}), nothing more was saved. Run the editor again, and report it if it comes back`;
+
+	console.error(`ccwatermelon-config stopped: ${failure}`);
 	process.exitCode = 1;
 });
