@@ -1,34 +1,19 @@
-import type { ColorName } from "./format";
-import type { PressureLevel } from "./pressure";
+import type { GitStatus } from "../git/git";
+import type { PressureLevel } from "../quota/pressure";
+import type { Mood } from "./mood";
 
-type MoodKind = "rose" | "zen" | "focus" | "stressed" | "panic";
+export type ReviewState = "approved" | "pending" | "changes_requested" | "draft";
 
-export interface Mood {
-	kind: MoodKind;
-	face: string;
-	color: ColorName;
+export interface PullRequest {
+	number: number;
+	url: string | null;
+	reviewState: ReviewState | null;
 }
 
-export interface UsageLimit {
-	utilization: number;
-	resets_at: number | null;
-}
-
-export interface UsageLimits {
-	five_hour: UsageLimit | null;
-	seven_day: UsageLimit | null;
-}
-
-export interface GitStatus {
-	branch: string;
-	dirty: boolean;
-	insertions: number;
-	deletions: number;
-}
-
-export interface Sample {
-	sampled_at: number;
-	value: number;
+export interface Clock {
+	now: number;
+	beat: number;
+	moving: boolean;
 }
 
 export interface StatuslineData {
@@ -75,4 +60,10 @@ export interface StatuslineData {
 	linesRemoved: number;
 	vimMode: string | null;
 	agentName: string | null;
+
+	effort: string | null;
+	thinking: boolean;
+	fastMode: boolean;
+	pullRequest: PullRequest | null;
+	repoUrl: string | null;
 }

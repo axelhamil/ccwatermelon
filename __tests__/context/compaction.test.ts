@@ -6,7 +6,7 @@ import { join } from "node:path";
 const claudeDir = mkdtempSync(join(tmpdir(), "ccw-compaction-"));
 process.env.CLAUDE_CONFIG_DIR = claudeDir;
 
-const { compactThreshold } = await import("../src/lib/compaction");
+const { compactThreshold } = await import("../../src/context/compaction");
 
 function givenSettings(settings: unknown): void {
 	writeFileSync(join(claudeDir, "settings.json"), JSON.stringify(settings), "utf-8");

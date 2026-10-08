@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { EditorState } from "../src/lib/editor";
-import { ROWS } from "../src/lib/editor";
-import type { Motion } from "../src/lib/editorView";
-import { drawEditor } from "../src/lib/editorView";
-import { color } from "../src/lib/format";
-import { stripAnsi, visualWidth } from "../src/lib/width";
+import type { EditorState } from "../../src/editor/state";
+import { ROWS } from "../../src/editor/state";
+import type { Motion } from "../../src/editor/view";
+import { drawEditor } from "../../src/editor/view";
+import { color } from "../../src/terminal/format";
+import { stripAnsi, visualWidth } from "../../src/terminal/width";
 
 const NOW = 1_800_000_000_000;
 const CONFIG_PATH = "/home/someone/.config/ccwatermelon/config.json";

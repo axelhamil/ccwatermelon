@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { color } from "../src/lib/format";
-import { resolveWidth, stripAnsi, truncateToWidth, visualWidth } from "../src/lib/width";
+import { color } from "../../src/terminal/format";
+import { resolveWidth, stripAnsi, truncateToWidth, visualWidth } from "../../src/terminal/width";
 
 describe("width", () => {
 	test("stripAnsi removes SGR color codes", () => {

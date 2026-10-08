@@ -1,4 +1,4 @@
-import type { Sample } from "./types";
+import type { Sample } from "../cost/sample";
 
 export interface EtaResult {
 	minutes: number | null;

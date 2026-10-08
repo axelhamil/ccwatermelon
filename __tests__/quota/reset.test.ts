@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resetOf } from "../src/lib/reset";
+import { resetOf } from "../../src/quota/reset";
 
 const nowMs = new Date(2026, 5, 10, 9, 0, 0).getTime();
 const inSeconds = (seconds: number) => Math.floor(nowMs / 1000) + seconds;
@@ -19,8 +19,10 @@ describe("resetOf", () => {
 		});
 	});
 
-	test("given a reset seconds away, then it never reads zero minutes", () => {
-		expect(resetOf(inSeconds(3), nowMs)).toEqual({ countdown: "↺1m", clock: "(09:00)" });
+	test("given a reset less than five minutes away, then the countdown ticks in seconds", () => {
+		expect(resetOf(inSeconds(272), nowMs)?.countdown).toBe("↺4m32s");
+		expect(resetOf(inSeconds(3), nowMs)?.countdown).toBe("↺0m03s");
+		expect(resetOf(inSeconds(300), nowMs)?.countdown).toBe("↺5m");
 	});
 
 	test("given a reset a few seconds short of a day, then the countdown and the weekday agree", () => {

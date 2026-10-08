@@ -1,11 +1,12 @@
-import { THEMES, type ThemeName } from "./format";
-import { classifyMood } from "./mood";
-import { FIVE_HOUR_WINDOW_SEC, projectedAtReset, SEVEN_DAY_WINDOW_SEC } from "./pace";
-import { isAlerting, pressureLevel } from "./pressure";
-import { SEGMENT_SPECS, type SegmentSpec, type SegmentToggle } from "./segments";
-import type { StatuslineData } from "./types";
-import type { ConfigFile, ResolvedConfig } from "./userConfig";
-import { defaultConfig } from "./userConfig";
+import type { SegmentToggle } from "../config/segmentConfig";
+import type { ConfigFile, ResolvedConfig } from "../config/userConfig";
+import { defaultConfig } from "../config/userConfig";
+import { FIVE_HOUR_WINDOW_SEC, projectedAtReset, SEVEN_DAY_WINDOW_SEC } from "../quota/pace";
+import { isAlerting, pressureLevel } from "../quota/pressure";
+import type { StatuslineData } from "../statusline/data";
+import { classifyMood } from "../statusline/mood";
+import { SEGMENT_SPECS, type SegmentSpec } from "../statusline/segments";
+import { THEMES, type ThemeName } from "../terminal/format";
 
 export type ThresholdKey = "compactAlert" | "fiveHourAlert" | "sevenDayAlert";
 
@@ -238,5 +239,10 @@ export function previewData(
 		linesRemoved: 38,
 		vimMode: null,
 		agentName: null,
+		effort: "high",
+		thinking: false,
+		fastMode: false,
+		pullRequest: { number: 128, url: null, reviewState: "approved" },
+		repoUrl: null,
 	};
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { burnRate } from "../src/lib/burn";
+import { burnRate } from "../../src/cost/burn";
 
 describe("burnRate", () => {
 	test("returns null if fewer than 2 samples", () => {

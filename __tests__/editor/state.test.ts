@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { EditorKey, EditorState } from "../src/lib/editor";
-import { applyKey, previewData, ROWS, segmentView, splitKeys } from "../src/lib/editor";
-import { defaultConfig, mergeConfig } from "../src/lib/userConfig";
+import { defaultConfig, mergeConfig } from "../../src/config/userConfig";
+import type { EditorKey, EditorState } from "../../src/editor/state";
+import { applyKey, previewData, ROWS, segmentView, splitKeys } from "../../src/editor/state";
 
 const fresh: EditorState = { file: {}, cursor: 0, dirty: false };
 const rowOf = (id: string) =>

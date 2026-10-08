@@ -1,4 +1,4 @@
-import { visualWidth } from "./width";
+import { visualWidth } from "../terminal/width";
 
 export interface Chunk {
 	text: string;

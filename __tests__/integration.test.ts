@@ -38,7 +38,9 @@ function runPayload(payload: unknown, width = 120): Promise<string> {
 }
 
 async function runFixture(name: string, width = 120): Promise<string> {
-	const fixture = JSON.parse(readFileSync(join(import.meta.dir, "..", "fixtures", name), "utf-8"));
+	const fixture = JSON.parse(
+		readFileSync(join(import.meta.dir, "..", "fixtures", "statusline", name), "utf-8"),
+	);
 	return runPayload(fixture, width);
 }
 
@@ -47,27 +49,27 @@ describe("integration", () => {
 		const out = await runFixture("normal.json");
 		const lines = out.split("\n").filter((l) => l.trim().length > 0);
 		expect(lines.length).toBe(3);
-		expect(out).toContain("(=ᴥ=)");
+		expect(out).toMatch(/\(=ᴥ=\)|\(-ᴥ-\)/);
 	});
 
 	test("alert-context renders 3 lines", async () => {
 		const out = await runFixture("alert-context.json");
 		const lines = out.split("\n").filter((l) => l.trim().length > 0);
 		expect(lines.length).toBe(3);
-		expect(out).toContain("(◉_◉)");
+		expect(out).toMatch(/\(◉_◉\)|\(-_-\)/);
 	});
 
 	test("narrow width collapses to a leaner render without crashing", async () => {
 		const out = await runFixture("normal.json", 40);
 		const lines = out.split("\n").filter((l) => l.trim().length > 0);
 		expect(lines.length).toBeGreaterThanOrEqual(2);
-		expect(out).toContain("(=ᴥ=)");
+		expect(out).toMatch(/\(=ᴥ=\)|\(-ᴥ-\)/);
 	});
 
 	test("celebration fixture renders the rose mood with a sparkle", async () => {
 		const out = await runFixture("celebration.json");
 
-		expect(out).toContain("(◕‿◕)");
+		expect(out).toMatch(/\(◕‿◕\)|\(◡‿◡\)/);
 		expect(out).toContain("✨");
 	});
 
@@ -89,12 +91,32 @@ describe("integration", () => {
 			}`,
 		);
 		const base = JSON.parse(
-			readFileSync(join(import.meta.dir, "..", "fixtures", "normal.json"), "utf-8"),
+			readFileSync(join(import.meta.dir, "..", "fixtures", "statusline", "normal.json"), "utf-8"),
 		);
 		base.workspace.current_dir = projectDir;
 
 		const out = await runPayload(base);
 		expect(out).not.toContain(" D $");
+	});
+
+	test("given a pull request whose url is not a plain https address, when rendered, then the badge shows without a link", async () => {
+		const base = JSON.parse(
+			readFileSync(join(import.meta.dir, "..", "fixtures", "statusline", "normal.json"), "utf-8"),
+		);
+		const hostile = {
+			...base,
+			pr: {
+				number: 7,
+				url: "https://evil.test/\u0007\u001b]8;;https://other.test",
+				review_state: "approved",
+			},
+			workspace: { ...base.workspace, repo: { host: "github.com", owner: "acme", name: "web;rm" } },
+		};
+
+		const out = await runPayload(hostile);
+
+		expect(out).toContain("#7 ✓");
+		expect(out).not.toContain("\x1b]8");
 	});
 
 	test("given the normal fixture, then the whole render stays under 250ms", async () => {

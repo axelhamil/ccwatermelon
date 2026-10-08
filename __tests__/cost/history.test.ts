@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { History } from "../src/lib/history";
+import { History } from "../../src/cost/history";
 
 const DAY = 86_400;
 const noon = Math.floor(new Date(2026, 5, 10, 12, 0, 0).getTime() / 1000);

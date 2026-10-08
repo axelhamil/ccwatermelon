@@ -1,17 +1,17 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { EditorKey, EditorState } from "../src/lib/editor";
-import { applyKey, previewData } from "../src/lib/editor";
-import type { Motion } from "../src/lib/editorView";
-import { drawEditor } from "../src/lib/editorView";
-import { applyPaletteOverrides } from "../src/lib/format";
-import { classifyMood } from "../src/lib/mood";
-import { isAlerting, pressureLevel } from "../src/lib/pressure";
-import { render } from "../src/lib/render";
-import type { StatuslineData } from "../src/lib/types";
-import type { ConfigFile } from "../src/lib/userConfig";
-import { defaultConfig, mergeConfig } from "../src/lib/userConfig";
-import { visualWidth } from "../src/lib/width";
+import type { ConfigFile } from "../src/config/userConfig";
+import { defaultConfig, mergeConfig } from "../src/config/userConfig";
+import type { EditorKey, EditorState } from "../src/editor/state";
+import { applyKey, previewData } from "../src/editor/state";
+import type { Motion } from "../src/editor/view";
+import { drawEditor } from "../src/editor/view";
+import { isAlerting, pressureLevel } from "../src/quota/pressure";
+import type { StatuslineData } from "../src/statusline/data";
+import { classifyMood } from "../src/statusline/mood";
+import { render } from "../src/statusline/render";
+import { applyPaletteOverrides } from "../src/terminal/format";
+import { visualWidth } from "../src/terminal/width";
 
 process.env.TZ = "UTC";
 

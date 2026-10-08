@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { pressureLevel } from "../src/lib/pressure";
+import { pressureLevel } from "../../src/quota/pressure";
 
 describe("pressureLevel", () => {
 	test("given an alert threshold of 80, then warning starts 20 points below and panic halfway to 100", () => {

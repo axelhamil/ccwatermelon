@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { projectedAtReset, SEVEN_DAY_WINDOW_SEC } from "../src/lib/pace";
+import { projectedAtReset, SEVEN_DAY_WINDOW_SEC } from "../../src/quota/pace";
 
 const now = 1_800_000_000;
 const DAY = 86_400;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { brailleGauge } from "../src/lib/gauge";
+import { brailleGauge } from "../../src/statusline/gauge";
 
 describe("brailleGauge", () => {
 	test("renders empty at 0", () => {

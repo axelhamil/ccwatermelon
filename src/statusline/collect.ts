@@ -1,18 +1,20 @@
 import { basename } from "node:path";
-import { CONFIG } from "../config";
-import { burnRate } from "./burn";
-import { compactThreshold } from "./compaction";
-import { forecastEta } from "./forecast";
-import { getGitStatus } from "./git";
-import { History } from "./history";
-import { resolveLimits } from "./limits";
+import { CONFIG } from "../config/constants";
+import type { ResolvedConfig } from "../config/userConfig";
+import { compactThreshold } from "../context/compaction";
+import { burnRate } from "../cost/burn";
+import { History } from "../cost/history";
+import type { GitStatus } from "../git/git";
+import { getGitStatus } from "../git/git";
+import { forecastEta } from "../quota/forecast";
+import { resolveLimits } from "../quota/limits";
+import { FIVE_HOUR_WINDOW_SEC, projectedAtReset, SEVEN_DAY_WINDOW_SEC } from "../quota/pace";
+import { pressureLevel } from "../quota/pressure";
+import type { UsageLimits } from "../quota/rateLimits";
+import { sanitizeLabel, sanitizeOptionalLabel } from "../terminal/sanitize";
+import type { PullRequest, StatuslineData } from "./data";
 import { classifyMood } from "./mood";
-import { FIVE_HOUR_WINDOW_SEC, projectedAtReset, SEVEN_DAY_WINDOW_SEC } from "./pace";
 import type { Payload } from "./payload";
-import { pressureLevel } from "./pressure";
-import { sanitizeLabel, sanitizeOptionalLabel } from "./sanitize";
-import type { GitStatus, StatuslineData, UsageLimits } from "./types";
-import type { ResolvedConfig } from "./userConfig";
 
 const FIVE_HOUR_METRIC = "5h_pct";
 const NO_GIT: GitStatus = { branch: "no-git", dirty: false, insertions: 0, deletions: 0 };
@@ -143,6 +145,26 @@ function minutesToLimit(
 	return eta.minutes < minutesToReset ? eta.minutes : null;
 }
 
+const WEB_URL = /^https:\/\/[\x21-\x7e]{1,2048}$/;
+const REPO_PART = /^[\w.-]+(\/[\w.-]+)*$/;
+
+function webUrl(value: string | undefined): string | null {
+	return value !== undefined && WEB_URL.test(value) ? value : null;
+}
+
+function repoUrl(repo: NonNullable<Payload["workspace"]>["repo"]): string | null {
+	const parts = [repo?.host, repo?.owner, repo?.name];
+	const isComplete = parts.every((part) => part !== undefined && REPO_PART.test(part));
+
+	return isComplete ? webUrl(`https://${parts.join("/")}`) : null;
+}
+
+function pullRequest(pr: Payload["pr"]): PullRequest | null {
+	if (pr?.number === undefined) return null;
+
+	return { number: pr.number, url: webUrl(pr.url), reviewState: pr.review_state ?? null };
+}
+
 function outputStyle(payload: Payload): string | null {
 	const name = sanitizeOptionalLabel(payload.output_style?.name);
 
@@ -208,5 +230,10 @@ export async function collectStatuslineData(
 		linesRemoved: payload.cost?.total_lines_removed ?? 0,
 		vimMode: sanitizeOptionalLabel(payload.vim?.mode),
 		agentName: sanitizeOptionalLabel(payload.agent?.name),
+		effort: sanitizeOptionalLabel(payload.effort?.level),
+		thinking: payload.thinking?.enabled ?? false,
+		fastMode: payload.fast_mode ?? false,
+		pullRequest: pullRequest(payload.pr),
+		repoUrl: git ? repoUrl(payload.workspace?.repo) : null,
 	};
 }

@@ -1,10 +1,9 @@
 import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { CONFIG } from "../config";
-import { readJsonFile } from "./json";
-import type { Payload } from "./payload";
-import type { UsageLimit, UsageLimits } from "./types";
+import { CONFIG } from "../config/constants";
+import { readJsonFile } from "../config/json";
+import type { RateLimits, UsageLimit, UsageLimits } from "./rateLimits";
 
 const API_URL = "https://api.anthropic.com/api/oauth/usage";
 const EMPTY_LIMITS: UsageLimits = { five_hour: null, seven_day: null };
@@ -60,9 +59,7 @@ function writeCache(data: UsageLimits, now: number): void {
 	renameSync(draft, target);
 }
 
-function windowFromPayload(
-	window: NonNullable<Payload["rate_limits"]>["five_hour"],
-): UsageLimit | null {
+function windowFromPayload(window: NonNullable<RateLimits>["five_hour"]): UsageLimit | null {
 	if (window?.used_percentage === undefined) return null;
 
 	return {
@@ -71,7 +68,7 @@ function windowFromPayload(
 	};
 }
 
-function limitsFromPayload(rateLimits: Payload["rate_limits"]): UsageLimits {
+function limitsFromPayload(rateLimits: RateLimits): UsageLimits {
 	return {
 		five_hour: windowFromPayload(rateLimits?.five_hour),
 		seven_day: windowFromPayload(rateLimits?.seven_day),
@@ -92,11 +89,17 @@ function spawnRefresh(): void {
 	}
 }
 
-function claimRefresh(lastKnown: UsageLimits, now: number): void {
+function claimRefresh(lastKnown: UsageLimits, now: number): boolean {
 	try {
 		writeCache(lastKnown, now);
+
+		return true;
 	} catch (err) {
-		console.error(`ccwatermelon: the limits cache is not writable, refreshing anyway: ${err}`);
+		console.error(
+			`ccwatermelon: the limits cache is not writable, quotas missing from the payload stay stale until ${CONFIG.paths.limitsCache} can be written: ${err}`,
+		);
+
+		return false;
 	}
 }
 
@@ -112,14 +115,13 @@ function limitsFromCache(now: number, refresh: () => void): UsageLimits {
 	const isFresh = cached !== null && now - cached.fetchedAt < CONFIG.limits.cacheTtlSec;
 	if (isFresh) return lastKnown;
 
-	claimRefresh(lastKnown, now);
-	refresh();
+	if (claimRefresh(lastKnown, now)) refresh();
 
 	return lastKnown;
 }
 
 export function resolveLimits(
-	rateLimits: Payload["rate_limits"],
+	rateLimits: RateLimits,
 	now: number,
 	refresh: () => void = spawnRefresh,
 ): UsageLimits {

@@ -2,8 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import type { Rgb, ThemeName } from "./format";
-import type { SegmentConfig } from "./segments";
+import type { Rgb, ThemeName } from "../terminal/format";
+import type { SegmentConfig } from "./segmentConfig";
 
 const RgbTupleSchema = z.tuple([
 	z.number().int().min(0).max(255),

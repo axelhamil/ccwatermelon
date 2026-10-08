@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { CONFIG } from "../config";
-import { readJsonFile } from "./json";
+import { CONFIG } from "../config/constants";
+import { readJsonFile } from "../config/json";
 
 const SettingsSchema = z.object({
 	autoCompactEnabled: z.boolean().optional().catch(undefined),

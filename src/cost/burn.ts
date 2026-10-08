@@ -1,4 +1,4 @@
-import type { Sample } from "./types";
+import type { Sample } from "./sample";
 
 export function burnRate(samples: Sample[]): number | null {
 	const sorted = [...samples].sort((a, b) => a.sampled_at - b.sampled_at);

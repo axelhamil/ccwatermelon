@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadUserConfig, stripJsonComments } from "../src/lib/userConfig";
+import { loadUserConfig, stripJsonComments } from "../../src/config/userConfig";
 
 describe("stripJsonComments", () => {
 	test("removes line and block comments outside strings", () => {

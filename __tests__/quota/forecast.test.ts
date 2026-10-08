@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { forecastEta } from "../src/lib/forecast";
+import { forecastEta } from "../../src/quota/forecast";
 
 const everyMinute = (values: number[]) => values.map((value, i) => ({ sampled_at: i * 60, value }));
 

@@ -1,5 +1,5 @@
-// biome-ignore lint/suspicious/noControlCharactersInRegex: matches ANSI SGR sequences to strip them
-const ANSI_RE = /\x1b\[[0-9;]*m/g;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matches ANSI SGR and OSC 8 link sequences to strip them
+const ANSI_RE = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x07]*\x07/g;
 const ELLIPSIS = "…";
 const FALLBACK_WIDTH = 80;
 

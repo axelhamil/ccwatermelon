@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Sample } from "./types";
+import type { Sample } from "./sample";
 
 const SCHEMA = `
 	CREATE TABLE IF NOT EXISTS samples (

@@ -1,13 +1,13 @@
 import { basename } from "node:path";
-import { CONFIG } from "./config";
-import { collectStatuslineData } from "./lib/collect";
-import { applyPaletteOverrides } from "./lib/format";
-import { migrateLegacyPaths } from "./lib/migrate";
-import type { Payload } from "./lib/payload";
-import { parsePayload } from "./lib/payload";
-import { render } from "./lib/render";
-import { sanitizeLabel } from "./lib/sanitize";
-import { loadUserConfig } from "./lib/userConfig";
+import { CONFIG } from "./config/constants";
+import { loadUserConfig } from "./config/userConfig";
+import { migrateLegacyPaths } from "./cost/migrate";
+import { collectStatuslineData } from "./statusline/collect";
+import type { Payload } from "./statusline/payload";
+import { parsePayload } from "./statusline/payload";
+import { render } from "./statusline/render";
+import { applyPaletteOverrides } from "./terminal/format";
+import { sanitizeLabel } from "./terminal/sanitize";
 
 async function readPayload(): Promise<Payload | null> {
 	try {

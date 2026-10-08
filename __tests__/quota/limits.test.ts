@@ -7,7 +7,7 @@ const sandbox = mkdtempSync(join(tmpdir(), "ccw-limits-"));
 process.env.CCWATERMELON_CACHE_DIR = sandbox;
 process.env.CLAUDE_CONFIG_DIR = sandbox;
 
-const limits = await import("../src/lib/limits");
+const limits = await import("../../src/quota/limits");
 
 const refresh = mock();
 const resolveLimits = (rateLimits: Parameters<typeof limits.resolveLimits>[0], at: number) =>
@@ -71,6 +71,18 @@ describe("resolveLimits", () => {
 
 		expect(resolveLimits(undefined, now).five_hour?.utilization).toBe(77);
 		expect(refresh).toHaveBeenCalledTimes(1);
+	});
+
+	test("given a cache that cannot be written, when limits are missing, then no refresh is started on every render", () => {
+		const blocker = join(sandbox, "not-a-directory");
+		writeFileSync(blocker, "");
+		process.env.CCWATERMELON_CACHE_DIR = join(blocker, "cache");
+		refresh.mockClear();
+
+		resolveLimits(undefined, now);
+		process.env.CCWATERMELON_CACHE_DIR = sandbox;
+
+		expect(refresh).not.toHaveBeenCalled();
 	});
 
 	test("given a cached window whose reset time has passed, then it reads as reset to zero", () => {

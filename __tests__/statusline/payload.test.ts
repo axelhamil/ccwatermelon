@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parsePayload } from "../src/lib/payload";
+import { parsePayload } from "../../src/statusline/payload";
 
 describe("parsePayload", () => {
 	test("given one hostile field, then only that field is dropped", () => {

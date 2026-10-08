@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { render } from "../src/lib/render";
-import type { StatuslineData } from "../src/lib/types";
-import { stripAnsi, visualWidth } from "../src/lib/width";
+import type { StatuslineData } from "../../src/statusline/data";
+import { brailleGauge } from "../../src/statusline/gauge";
+import { render } from "../../src/statusline/render";
+import { color } from "../../src/terminal/format";
+import { stripAnsi, visualWidth } from "../../src/terminal/width";
 
 const base: StatuslineData = {
-	mood: { kind: "zen", face: "(=ᴥ=)~", color: "teal" },
+	mood: { kind: "zen", face: "(=ᴥ=)~", blink: "(-ᴥ-)~", color: "teal" },
 	git: { branch: "main", dirty: false, insertions: 0, deletions: 0 },
 	modelName: "Opus 4.7",
 	dirName: "acme-web",
@@ -39,6 +41,11 @@ const base: StatuslineData = {
 	linesRemoved: 0,
 	vimMode: null,
 	agentName: null,
+	effort: null,
+	thinking: false,
+	fastMode: false,
+	pullRequest: null,
+	repoUrl: null,
 };
 
 function withWidth(width: number, fn: () => string): string {
@@ -54,8 +61,7 @@ function withWidth(width: number, fn: () => string): string {
 
 describe("render", () => {
 	test("shows mood face", () => {
-		const out = withWidth(120, () => render(base));
-		expect(out).toContain("(=ᴥ=)~");
+		expect(render(base, {}, 120, 0)).toContain("(=ᴥ=)~");
 	});
 
 	test("shows branch and model", () => {
@@ -94,6 +100,58 @@ describe("render", () => {
 	test("celebration mode adds a sparkle", () => {
 		const out = stripAnsi(withWidth(120, () => render({ ...base, celebrationMode: true })));
 		expect(out).toContain("✨");
+	});
+});
+
+describe("identity line", () => {
+	const reviewed = {
+		...base,
+		effort: "high",
+		repoUrl: "https://github.com/acme/web",
+		pullRequest: {
+			number: 128,
+			url: "https://github.com/acme/web/pull/128",
+			reviewState: "changes_requested" as const,
+		},
+	};
+	const identityOf = (out: string) => out.split("\n")[0] ?? "";
+
+	test("given an open pull request, when rendered, then its number and review state follow the branch", () => {
+		const identity = stripAnsi(identityOf(render(reviewed, {}, 120)));
+
+		expect(identity).toContain("main #128 ✗ · Opus 4.7 high");
+	});
+
+	test("given a known repository, when rendered, then directory, branch and pull request are links that take no width", () => {
+		const linked = identityOf(render(reviewed, {}, 120));
+		const plain = identityOf(render(reviewed, { links: { enabled: false } }, 120));
+
+		expect(linked).toContain("\x1b]8;;https://github.com/acme/web\x07");
+		expect(linked).toContain("\x1b]8;;https://github.com/acme/web/tree/main\x07");
+		expect(linked).toContain("\x1b]8;;https://github.com/acme/web/pull/128\x07");
+		expect(plain).not.toContain("\x1b]8");
+		expect(visualWidth(linked)).toBe(visualWidth(plain));
+	});
+
+	test("given a branch with characters that mean something in a url, when linked, then they are escaped", () => {
+		const odd = { ...reviewed, git: { ...reviewed.git, branch: "fix/#12 a" } };
+
+		expect(render(odd, {}, 120)).toContain("/tree/fix/%2312%20a\x07");
+	});
+
+	test("given a terminal too narrow for the pull request badge, when rendered, then the badge leaves before names are cut", () => {
+		const core = "(=ᴥ=)~ acme-web · main #128 ✗ · Opus 4.7";
+		const tight = stripAnsi(identityOf(render(reviewed, {}, visualWidth(core) - 1, 0)));
+
+		expect(tight).not.toContain("#128");
+		expect(tight).toContain("acme-web");
+		expect(tight).not.toContain("…");
+	});
+
+	test("given the pull request segment disabled, when rendered, then the badge is gone", () => {
+		const out = render(reviewed, { pullRequest: { enabled: false } }, 120);
+
+		expect(stripAnsi(out)).not.toContain("#128");
 	});
 });
 
@@ -214,8 +272,28 @@ describe("quota rows", () => {
 	test("given a gauge past its alert threshold, then its glyph alternates colour from one second to the next", () => {
 		const alerting = { ...base, sevenDayLevel: "critical" as const };
 
-		expect(render(alerting, {}, 120, 1000)).not.toBe(render(alerting, {}, 120, 2000));
-		expect(render(base, {}, 120, 1000)).toBe(render(base, {}, 120, 2000));
+		const pulse = color(brailleGauge(alerting.sevenDayPct ?? 0), "pink");
+
+		expect(render(alerting, {}, 120, 1000)).toContain(pulse);
+		expect(render(alerting, {}, 120, 2000)).not.toContain(pulse);
+	});
+
+	test("given the clock advancing, when rendered, then the face blinks one second in five and a lit separator travels", () => {
+		const faces = [0, 1, 2, 3, 4].map((second) => render(base, {}, 120, second * 1000));
+		const lit = color("·", "text");
+		const litAt = (out: string) => out.indexOf(lit);
+
+		expect(faces.slice(0, 4).every((out) => out.includes("(=ᴥ=)~"))).toBe(true);
+		expect(faces[4]).toContain("(-ᴥ-)~");
+		expect(litAt(faces[0] ?? "")).toBeGreaterThan(-1);
+		expect(litAt(faces[1] ?? "")).toBeGreaterThan(litAt(faces[0] ?? ""));
+	});
+
+	test("given motion switched off, when the clock advances, then nothing moves", () => {
+		const still = { motion: { enabled: false } };
+		const alerting = { ...base, sevenDayLevel: "critical" as const, burnRatePerHr: 40 };
+
+		expect(render(alerting, still, 120, 1000)).toBe(render(alerting, still, 120, 4000));
 	});
 
 	test("falls back to a placeholder when no quota is known", () => {

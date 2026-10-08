@@ -1,21 +1,32 @@
+import type { SegmentConfig } from "../config/segmentConfig";
+import { isAlerting, type PressureLevel, toneOf } from "../quota/pressure";
+import { resetOf } from "../quota/reset";
+import type { ColorName } from "../terminal/format";
+import {
+	color,
+	formatCost,
+	formatDuration,
+	formatPct,
+	formatTokens,
+	gradientText,
+	link,
+} from "../terminal/format";
+import { resolveWidth, truncateToWidth, visualWidth } from "../terminal/width";
+import type { Clock, PullRequest, ReviewState, StatuslineData } from "./data";
 import type { Chunk } from "./fit";
 import { fitChunks } from "./fit";
-import type { ColorName } from "./format";
-import { color, formatCost, formatDuration, formatPct, formatTokens, gradientText } from "./format";
 import { brailleGauge } from "./gauge";
-import { isAlerting, type PressureLevel, toneOf } from "./pressure";
-import { resetOf } from "./reset";
-import type { SegmentConfig } from "./segments";
 import {
 	dot,
 	GAUGE_SEGMENTS,
 	isEnabled,
+	LINKS_SEGMENT,
+	MOTION_SEGMENT,
 	optionalChunks,
 	PACE_SEGMENT,
+	PULL_REQUEST_SEGMENT,
 	priorityOf,
 } from "./segments";
-import type { StatuslineData } from "./types";
-import { resolveWidth, truncateToWidth, visualWidth } from "./width";
 
 const MELON = "🍉";
 const COST_ICON = "\u{f140b}";
@@ -26,6 +37,7 @@ const HEADROOM_SHOWN_ABOVE_PCT = 60;
 const PACE_WARN_ABOVE_PCT = 85;
 const PACE_DISPLAY_CEILING = 999;
 const DRIFT_PER_SECOND = 0.35;
+const BLINK_EVERY_BEATS = 5;
 
 function shrinkToFit(labels: string[], excess: number): string[] {
 	const shrunk = [...labels];
@@ -45,8 +57,8 @@ function shrinkToFit(labels: string[], excess: number): string[] {
 	return shrunk;
 }
 
-function driftOf(now: number): number {
-	return Math.floor(now / 1000) * DRIFT_PER_SECOND;
+function driftOf(clock: Clock): number {
+	return clock.beat * DRIFT_PER_SECOND;
 }
 
 function gaugeHead(
@@ -54,11 +66,11 @@ function gaugeHead(
 	pct: number,
 	level: PressureLevel,
 	calm: ColorName,
-	now: number,
+	clock: Clock,
 	pctWidth = 0,
 ): string {
 	const tone = toneOf(level, calm);
-	const isPulseBeat = isAlerting(level) && Math.floor(now / 1000) % 2 === 1;
+	const isPulseBeat = isAlerting(level) && clock.beat % 2 === 1;
 
 	return (
 		color(`${label} ${formatPct(pct).padStart(pctWidth)}`, tone) +
@@ -73,12 +85,12 @@ function headroomNote(headroom: number | null, pct: number): string {
 	return pct > HEADROOM_SHOWN_ABOVE_PCT ? ` ${color(`↓${formatTokens(headroom)}`, "dim")}` : "";
 }
 
-function contextChunk(d: StatuslineData, now: number, segments: SegmentConfig): Chunk[] {
+function contextChunk(d: StatuslineData, clock: Clock, segments: SegmentConfig): Chunk[] {
 	const spec = GAUGE_SEGMENTS.contextGauge;
 	const pct = d.compactPct ?? d.contextPct;
 	if (pct === null || !isEnabled(segments, spec.id)) return [];
 
-	const gauge = gaugeHead("conv", pct, d.contextLevel, "sky", now);
+	const gauge = gaugeHead("conv", pct, d.contextLevel, "sky", clock);
 
 	return [
 		{
@@ -88,57 +100,91 @@ function contextChunk(d: StatuslineData, now: number, segments: SegmentConfig): 
 	];
 }
 
-function identityCore(d: StatuslineData, dirName: string, branchName: string, now: number): string {
-	const mood = color(d.mood.face, d.mood.color);
-	const spark = d.celebrationMode ? gradientText(" ✨", driftOf(now)) : "";
-	const dir = color(dirName, "subtext");
-	const branch = color(branchName, "mauve") + (d.git.dirty ? color("*", "green") : "");
+const REVIEW_MARKS: Record<ReviewState, { glyph: string; tone: ColorName }> = {
+	approved: { glyph: "✓", tone: "green" },
+	pending: { glyph: "●", tone: "yellow" },
+	changes_requested: { glyph: "✗", tone: "red" },
+	draft: { glyph: "◌", tone: "dim" },
+};
+
+function pullRequestBadge(pr: PullRequest | null, linked: boolean): string {
+	if (pr === null) return "";
+
+	const mark = pr.reviewState ? REVIEW_MARKS[pr.reviewState] : null;
+	const badge = color(`#${pr.number}${mark ? ` ${mark.glyph}` : ""}`, mark?.tone ?? "subtext");
+
+	return ` ${link(badge, linked ? pr.url : null)}`;
+}
+
+function identityCore(
+	d: StatuslineData,
+	dirName: string,
+	branchName: string,
+	clock: Clock,
+	segments: SegmentConfig,
+): string {
+	const linked = isEnabled(segments, LINKS_SEGMENT.id);
+	const repoUrl = linked ? d.repoUrl : null;
+	const branchPath = d.git.branch.split("/").map(encodeURIComponent).join("/");
+	const branchUrl = repoUrl === null ? null : `${repoUrl}/tree/${branchPath}`;
+	const pullRequest = isEnabled(segments, PULL_REQUEST_SEGMENT.id)
+		? pullRequestBadge(d.pullRequest, linked)
+		: "";
+	const isBlinking = clock.moving && clock.beat % BLINK_EVERY_BEATS === BLINK_EVERY_BEATS - 1;
+	const mood = color(isBlinking ? d.mood.blink : d.mood.face, d.mood.color);
+	const spark = d.celebrationMode ? gradientText(" ✨", driftOf(clock)) : "";
+	const dir = link(color(dirName, "subtext"), repoUrl);
+	const branch =
+		link(color(branchName, "mauve"), branchUrl) + (d.git.dirty ? color("*", "green") : "");
 	const insertions = d.git.insertions > 0 ? ` ${color(`+${d.git.insertions}`, "green")}` : "";
 	const deletions = d.git.deletions > 0 ? ` ${color(`-${d.git.deletions}`, "red")}` : "";
 	const contextBadge = /1M/.test(d.modelName) ? color(" 1M", "dim") : "";
 	const model = color(d.modelName.replace(/\s*\(.*?\)\s*$/, ""), "peach") + contextBadge;
 	const separator = dot();
 
-	return `${mood}${spark} ${dir} ${separator} ${branch}${insertions}${deletions} ${separator} ${model}`;
+	return `${mood}${spark} ${dir} ${separator} ${branch}${pullRequest}${insertions}${deletions} ${separator} ${model}`;
 }
 
 function renderIdentityLine(
 	d: StatuslineData,
-	now: number,
+	clock: Clock,
 	segments: SegmentConfig,
 	width: number,
 ): string {
-	const excess = visualWidth(identityCore(d, d.dirName, d.git.branch, now)) - width;
+	const widthWith = (shown: SegmentConfig) =>
+		visualWidth(identityCore(d, d.dirName, d.git.branch, clock, shown));
+	const withoutPullRequest = { ...segments, [PULL_REQUEST_SEGMENT.id]: { enabled: false } };
+	const shown = widthWith(segments) <= width ? segments : withoutPullRequest;
 	const [dirName = d.dirName, branchName = d.git.branch] = shrinkToFit(
 		[d.dirName, d.git.branch],
-		excess,
+		widthWith(shown) - width,
 	);
 
 	return fitChunks(
-		identityCore(d, dirName, branchName, now),
-		[...contextChunk(d, now, segments), ...optionalChunks(1, d, now, segments)],
+		identityCore(d, dirName, branchName, clock, shown),
+		[...optionalChunks(1, d, clock, segments), ...contextChunk(d, clock, segments)],
 		width,
 	);
 }
 
-function costDisplay(cost: number, now: number): string {
+function costDisplay(cost: number, clock: Clock): string {
 	const text = `${COST_ICON} ${formatCost(cost)}`;
 
 	return COST_MILESTONES.some((milestone) => cost >= milestone)
-		? gradientText(text, driftOf(now))
+		? gradientText(text, driftOf(clock))
 		: color(text, "teal");
 }
 
 function renderEconomyLine(
 	d: StatuslineData,
-	now: number,
+	clock: Clock,
 	segments: SegmentConfig,
 	width: number,
 ): string {
 	const duration = color(`(${formatDuration(d.sessionDurationMs)})`, "dim");
-	const core = `${costDisplay(d.sessionCost, now)} ${duration}`;
+	const core = `${costDisplay(d.sessionCost, clock)} ${duration}`;
 
-	return fitChunks(core, optionalChunks(2, d, now, segments), width);
+	return fitChunks(core, optionalChunks(2, d, clock, segments), width);
 }
 
 interface Cell {
@@ -189,7 +235,7 @@ function limitCell(d: StatuslineData): Cell {
 	return d.etaCooling ? { text: "↓ cooling", tone: "green" } : BLANK;
 }
 
-function quotaRows(d: StatuslineData, segments: SegmentConfig, now: number): QuotaRow[] {
+function quotaRows(d: StatuslineData, segments: SegmentConfig, clock: Clock): QuotaRow[] {
 	const showPace = isEnabled(segments, PACE_SEGMENT.id);
 	const quotas = [
 		{
@@ -217,7 +263,7 @@ function quotaRows(d: StatuslineData, segments: SegmentConfig, now: number): Quo
 	return quotas.flatMap(({ spec, label, pct, level, projectedPct, resetsAt, calm, note }) => {
 		if (pct === null || !isEnabled(segments, spec.id)) return [];
 
-		const reset = resetOf(resetsAt, now);
+		const reset = resetOf(resetsAt, clock.now);
 		const cells = {
 			countdown: reset ? { text: reset.countdown, tone: "dim" as const } : BLANK,
 			clock: reset ? { text: reset.clock, tone: "dim" as const } : BLANK,
@@ -235,7 +281,7 @@ function padCell(text: string, width: number, column: Column): string {
 	return RIGHT_ALIGNED.includes(column) ? padding + text : text + padding;
 }
 
-function quotaTable(rows: QuotaRow[], columns: readonly Column[], now: number): string[] {
+function quotaTable(rows: QuotaRow[], columns: readonly Column[], clock: Clock): string[] {
 	const filled = columns.filter((column) => rows.some((row) => row.cells[column].text !== ""));
 	const widthOf = (column: Column) =>
 		Math.max(...rows.map((row) => visualWidth(row.cells[column].text)));
@@ -243,7 +289,7 @@ function quotaTable(rows: QuotaRow[], columns: readonly Column[], now: number): 
 
 	return rows.map((row, index) => {
 		const prefix = index === 0 ? `${MELON} ` : ROW_INDENT;
-		const head = gaugeHead(row.label, row.pct, row.level, row.calm, now, pctWidth);
+		const head = gaugeHead(row.label, row.pct, row.level, row.calm, clock, pctWidth);
 		const lastFilled = filled.findLastIndex((column) => row.cells[column].text !== "");
 		const cells = filled.slice(0, lastFilled + 1).map((column, position) => {
 			const cell = row.cells[column];
@@ -256,9 +302,9 @@ function quotaTable(rows: QuotaRow[], columns: readonly Column[], now: number): 
 	});
 }
 
-function quotaLine(rows: QuotaRow[], now: number): string {
+function quotaLine(rows: QuotaRow[], clock: Clock): string {
 	const quotas = rows.map((row) => {
-		const head = gaugeHead(row.label, row.pct, row.level, row.calm, now);
+		const head = gaugeHead(row.label, row.pct, row.level, row.calm, clock);
 		const cells = Object.values(row.cells)
 			.filter((cell) => cell.text !== "")
 			.map((cell) => ` ${color(cell.text, cell.tone)}`);
@@ -271,20 +317,35 @@ function quotaLine(rows: QuotaRow[], now: number): string {
 
 function renderQuotaLines(
 	d: StatuslineData,
-	now: number,
+	clock: Clock,
 	segments: SegmentConfig,
 	width: number,
 ): string[] {
-	const rows = quotaRows(d, segments, now);
+	const rows = quotaRows(d, segments, clock);
 	if (rows.length === 0) return [color(`${MELON} quotas unavailable`, "dim")];
 
-	const line = quotaLine(rows, now);
+	const line = quotaLine(rows, clock);
 	if (visualWidth(line) <= width) return [line];
 
-	const layouts = COLUMN_SETS.map((columns) => quotaTable(rows, columns, now));
+	const layouts = COLUMN_SETS.map((columns) => quotaTable(rows, columns, clock));
 	const fitting = layouts.find((lines) => lines.every((line) => visualWidth(line) <= width));
 
 	return fitting ?? layouts[layouts.length - 1] ?? [];
+}
+
+function chaseSeparators(lines: string[], clock: Clock): string[] {
+	const separator = dot();
+	const total = lines.reduce((count, line) => count + line.split(separator).length - 1, 0);
+	if (!clock.moving || total === 0) return lines;
+
+	const lit = clock.beat % total;
+	let seen = 0;
+
+	return lines.map((line) =>
+		line
+			.split(separator)
+			.reduce((built, part) => built + (seen++ === lit ? color("·", "text") : separator) + part),
+	);
 }
 
 export function render(
@@ -293,9 +354,13 @@ export function render(
 	width: number = resolveWidth(),
 	now: number = Date.now(),
 ): string {
-	return [
-		renderIdentityLine(d, now, segments, width),
-		renderEconomyLine(d, now, segments, width),
-		...renderQuotaLines(d, now, segments, width),
-	].join("\n");
+	const moving = isEnabled(segments, MOTION_SEGMENT.id);
+	const clock = { now, beat: moving ? Math.floor(now / 1000) : 0, moving };
+	const lines = [
+		renderIdentityLine(d, clock, segments, width),
+		renderEconomyLine(d, clock, segments, width),
+		...renderQuotaLines(d, clock, segments, width),
+	];
+
+	return chaseSeparators(lines, clock).join("\n");
 }

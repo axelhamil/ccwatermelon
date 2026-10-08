@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { EditorKey, EditorState } from "./lib/editor";
-import { applyKey, ROWS, splitKeys, thresholdOf } from "./lib/editor";
-import type { Motion } from "./lib/editorView";
-import { drawEditor, isAnimating, isSaveToastOver } from "./lib/editorView";
-import { readConfigFile, userConfigPath } from "./lib/userConfig";
+import { readConfigFile, userConfigPath } from "./config/userConfig";
+import type { EditorKey, EditorState } from "./editor/state";
+import { applyKey, ROWS, splitKeys, thresholdOf } from "./editor/state";
+import type { Motion } from "./editor/view";
+import { drawEditor, isAnimating, isSaveToastOver } from "./editor/view";
 
 const CONFIG_PATH = userConfigPath();
 const FRAME_MS = 33;

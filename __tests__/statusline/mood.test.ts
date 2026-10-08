@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { MoodInput } from "../src/lib/mood";
-import { classifyMood } from "../src/lib/mood";
+import type { MoodInput } from "../../src/statusline/mood";
+import { classifyMood } from "../../src/statusline/mood";
 
 const ordinary: MoodInput = {
 	levels: ["calm", "calm", "calm"],

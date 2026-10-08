@@ -57,6 +57,13 @@ export function color(text: string, name: ColorName): string {
 	return colorRgb(text, rgb);
 }
 
+const LINK_OPEN = "\x1b]8;;";
+const LINK_END = "\x07";
+
+export function link(text: string, url: string | null): string {
+	return url === null ? text : `${LINK_OPEN}${url}${LINK_END}${text}${LINK_OPEN}${LINK_END}`;
+}
+
 export function colorRgb(text: string, rgb: Rgb): string {
 	const [r, g, b] = rgb;
 	return `\x1b[38;2;${r};${g};${b}m${text}\x1b[0m`;

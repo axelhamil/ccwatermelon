@@ -1,14 +1,7 @@
+import type { SegmentConfig } from "../config/segmentConfig";
+import { color, formatCost, formatPct } from "../terminal/format";
+import type { Clock, StatuslineData } from "./data";
 import type { Chunk } from "./fit";
-import { color, formatCost, formatPct } from "./format";
-import type { StatuslineData } from "./types";
-
-export interface SegmentToggle {
-	enabled?: boolean;
-	priority?: number;
-	line?: 1 | 2;
-}
-
-export type SegmentConfig = Record<string, SegmentToggle>;
 
 type Line = 1 | 2;
 
@@ -23,7 +16,7 @@ export interface SegmentSpec {
 interface OptionalSegment extends SegmentSpec {
 	line: Line;
 	priority: number;
-	text: (d: StatuslineData, now: number) => string | null;
+	text: (d: StatuslineData, clock: Clock) => string | null;
 }
 
 export function dot(): string {
@@ -65,6 +58,25 @@ function projectToday(d: StatuslineData): string | null {
 }
 
 const OPTIONAL_SEGMENTS: readonly OptionalSegment[] = [
+	{
+		id: "effort",
+		line: 1,
+		priority: 7,
+		text: (d) => (d.effort ? ` ${color(d.effort, "dim")}` : null),
+	},
+	{
+		id: "fastMode",
+		line: 1,
+		priority: 7,
+		text: (d) => (d.fastMode ? ` ${color("↯fast", "yellow")}` : null),
+	},
+	{
+		id: "thinking",
+		line: 1,
+		priority: 3,
+		disabledByDefault: true,
+		text: (d) => (d.thinking ? ` ${color("✦", "lavender")}` : null),
+	},
 	{
 		id: "worktree",
 		line: 1,
@@ -114,7 +126,7 @@ const OPTIONAL_SEGMENTS: readonly OptionalSegment[] = [
 		line: 1,
 		priority: 8,
 		relocatable: true,
-		text: (_d, now) => (isNight(now) ? ` ${color("☾", "lavender")}` : null),
+		text: (_d, clock) => (isNight(clock.now) ? ` ${color("☾", "lavender")}` : null),
 	},
 	{ id: "linesChanged", line: 2, priority: 22, relocatable: true, text: linesChanged },
 	{
@@ -140,9 +152,9 @@ const OPTIONAL_SEGMENTS: readonly OptionalSegment[] = [
 		id: "burn",
 		line: 2,
 		priority: 50,
-		text: (d) =>
+		text: (d, clock) =>
 			d.burnRatePerHr !== null && d.burnRatePerHr > BURN_ALERT_PER_HR
-				? ` ${dot()} ${FIRE} ${color(`${formatCost(d.burnRatePerHr)}/hr`, "red")}`
+				? ` ${dot()} ${FIRE} ${color(`${formatCost(d.burnRatePerHr)}/hr`, clock.beat % 2 === 1 ? "peach" : "red")}`
 				: null,
 	},
 	{
@@ -163,11 +175,17 @@ export const GAUGE_SEGMENTS = {
 } as const satisfies Record<string, SegmentSpec>;
 
 export const PACE_SEGMENT: SegmentSpec = { id: "pace", line: 3 };
+export const PULL_REQUEST_SEGMENT: SegmentSpec = { id: "pullRequest", line: 1 };
+export const LINKS_SEGMENT: SegmentSpec = { id: "links", line: 1 };
+export const MOTION_SEGMENT: SegmentSpec = { id: "motion", line: 1 };
 
 export const SEGMENT_SPECS: readonly SegmentSpec[] = [
 	...OPTIONAL_SEGMENTS,
 	...Object.values(GAUGE_SEGMENTS),
 	PACE_SEGMENT,
+	PULL_REQUEST_SEGMENT,
+	LINKS_SEGMENT,
+	MOTION_SEGMENT,
 ];
 
 export function isEnabled(config: SegmentConfig, id: string, disabledByDefault = false): boolean {
@@ -187,14 +205,14 @@ function lineOf(config: SegmentConfig, segment: OptionalSegment): Line {
 export function optionalChunks(
 	line: Line,
 	d: StatuslineData,
-	now: number,
+	clock: Clock,
 	config: SegmentConfig,
 ): Chunk[] {
 	return OPTIONAL_SEGMENTS.filter(
 		(segment) =>
 			isEnabled(config, segment.id, segment.disabledByDefault) && lineOf(config, segment) === line,
 	).flatMap((segment) => {
-		const text = segment.text(d, now);
+		const text = segment.text(d, clock);
 
 		return text === null
 			? []

@@ -1,13 +1,20 @@
-import type { EditorState, Row, ThresholdKey } from "./editor";
-import { previewData, ROWS, segmentView, themeOf, thresholdOf } from "./editor";
-import type { ColorName } from "./format";
-import { applyPaletteOverrides, color, colorRgb, lerpColor, PALETTE, THEMES } from "./format";
-import type { PressureLevel } from "./pressure";
-import { pressureLevel, pressureZones } from "./pressure";
-import { render } from "./render";
-import type { ConfigFile } from "./userConfig";
-import { defaultConfig, mergeConfig } from "./userConfig";
-import { truncateToWidth, visualWidth } from "./width";
+import type { ConfigFile } from "../config/userConfig";
+import { defaultConfig, mergeConfig } from "../config/userConfig";
+import type { PressureLevel } from "../quota/pressure";
+import { pressureLevel, pressureZones } from "../quota/pressure";
+import { render } from "../statusline/render";
+import type { ColorName } from "../terminal/format";
+import {
+	applyPaletteOverrides,
+	color,
+	colorRgb,
+	lerpColor,
+	PALETTE,
+	THEMES,
+} from "../terminal/format";
+import { truncateToWidth, visualWidth } from "../terminal/width";
+import type { EditorState, Row, ThresholdKey } from "./state";
+import { previewData, ROWS, segmentView, themeOf, thresholdOf } from "./state";
 
 interface Tween {
 	from: number;

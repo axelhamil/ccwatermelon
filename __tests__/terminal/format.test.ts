@@ -10,8 +10,8 @@ import {
 	lerpColor,
 	PALETTE,
 	THEMES,
-} from "../src/lib/format";
-import { stripAnsi } from "../src/lib/width";
+} from "../../src/terminal/format";
+import { stripAnsi } from "../../src/terminal/width";
 
 describe("formatCost", () => {
 	test("under $10 shows 2 decimals", () => {

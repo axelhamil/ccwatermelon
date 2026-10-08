@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { sanitizeLabel, sanitizeOptionalLabel } from "../src/lib/sanitize";
+import { sanitizeLabel, sanitizeOptionalLabel } from "../../src/terminal/sanitize";
 
 const ESC = String.fromCharCode(0x1b);
 const BEL = String.fromCharCode(0x07);

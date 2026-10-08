@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { migrateLegacyPaths } from "../src/lib/migrate";
+import { migrateLegacyPaths } from "../../src/cost/migrate";
 
 describe("migrateLegacyPaths", () => {
 	const dirs: string[] = [];

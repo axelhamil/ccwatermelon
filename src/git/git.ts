@@ -1,5 +1,11 @@
 import { $ } from "bun";
-import type { GitStatus } from "./types";
+
+export interface GitStatus {
+	branch: string;
+	dirty: boolean;
+	insertions: number;
+	deletions: number;
+}
 
 async function currentBranch(cwd: string): Promise<string | null> {
 	const branch = await $`git -C ${cwd} symbolic-ref --short -q HEAD`.quiet().nothrow();

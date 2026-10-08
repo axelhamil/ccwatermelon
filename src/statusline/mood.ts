@@ -1,5 +1,14 @@
-import type { PressureLevel } from "./pressure";
-import type { Mood } from "./types";
+import type { PressureLevel } from "../quota/pressure";
+import type { ColorName } from "../terminal/format";
+
+type MoodKind = "rose" | "zen" | "focus" | "stressed" | "panic";
+
+export interface Mood {
+	kind: MoodKind;
+	face: string;
+	blink: string;
+	color: ColorName;
+}
 
 export interface MoodInput {
 	levels: PressureLevel[];
@@ -24,12 +33,12 @@ function isQuiet(input: MoodInput): boolean {
 export function classifyMood(input: MoodInput): Mood {
 	const reached = (level: PressureLevel) => input.levels.includes(level);
 
-	if (reached("panic")) return { kind: "panic", face: "(╯°□°)╯", color: "red" };
-	if (reached("critical")) return { kind: "stressed", face: "(◉_◉)", color: "red" };
+	if (reached("panic")) return { kind: "panic", face: "(╯°□°)╯", blink: "(ノ°□°)ノ", color: "red" };
+	if (reached("critical")) return { kind: "stressed", face: "(◉_◉)", blink: "(-_-)", color: "red" };
 	if (reached("warn") || input.sessionCost > FOCUS_COST) {
-		return { kind: "focus", face: "(•‿•)", color: "yellow" };
+		return { kind: "focus", face: "(•‿•)", blink: "(-‿-)", color: "yellow" };
 	}
-	if (isQuiet(input)) return { kind: "rose", face: "(◕‿◕)", color: "pink" };
+	if (isQuiet(input)) return { kind: "rose", face: "(◕‿◕)", blink: "(◡‿◡)", color: "pink" };
 
-	return { kind: "zen", face: "(=ᴥ=)", color: "teal" };
+	return { kind: "zen", face: "(=ᴥ=)", blink: "(-ᴥ-)", color: "teal" };
 }

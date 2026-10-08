@@ -1,4 +1,4 @@
-import type { ColorName } from "./format";
+import type { ColorName } from "../terminal/format";
 
 export type PressureLevel = "calm" | "warn" | "critical" | "panic";
 

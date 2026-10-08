@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { fitChunks } from "../src/lib/fit";
+import { fitChunks } from "../../src/statusline/fit";
 
 describe("fitChunks", () => {
 	test("keeps everything when it fits", () => {

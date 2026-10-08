@@ -1,3 +1,3 @@
-import { refreshLimits } from "./lib/limits";
+import { refreshLimits } from "./quota/limits";
 
 await refreshLimits();

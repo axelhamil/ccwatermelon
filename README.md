@@ -40,7 +40,7 @@ The conversation gauge sits next to the model it belongs to. The two quotas shar
 
 - `conv 72% ↓52k`: the conversation is at 72% of the compaction threshold, 52k tokens before Claude Code compacts it. Past the threshold it reads `+272k`, the amount already over.
 - `5h 78%` and `7d 64%`: how much of each rate-limit window is used.
-- `↺50m (14:50)`: the window resets in 50 minutes, at 14:50 local time. Past a day it counts in days and names the weekday.
+- `↺50m (14:50)`: the window resets in 50 minutes, at 14:50 local time. Past a day it counts in days and names the weekday, under five minutes it counts in seconds (`↺4m32s`).
 - `end 94%`: where the window will stand at its reset if you keep the average pace you have had since it opened. Under 100% you make it to the reset. It turns peach from 85%, and red over 100%, when you will be blocked before the reset.
 - `⚠ limit in 35m`: at the pace of the last minutes the 5h quota runs out before it resets. It appears right after the 5h quota, only when that is the case.
 
@@ -68,10 +68,28 @@ In `~/.claude/settings.json`:
   "statusLine": {
     "type": "command",
     "command": "bun ~/.claude/scripts/ccwatermelon/src/index.ts",
-    "padding": 0
+    "padding": 0,
+    "refreshInterval": 1
+  },
+  "subagentStatusLine": {
+    "type": "command",
+    "command": "bun ~/.claude/scripts/ccwatermelon/src/subagents.ts"
   }
 }
 ```
+
+Both extras are optional:
+
+- `refreshInterval` re-runs the line every second on top of Claude Code's own events. Countdowns tick, a gauge past its threshold pulses and the gradients drift without waiting for the next message. Leave it out and the line only moves when Claude Code redraws, at no idle cost.
+- `subagentStatusLine` draws the row of each running subagent in the same palette: status, name, model, tokens with their recent trend, elapsed time and task, aligned in columns.
+
+```
+⠋ explorer            haiku 4.5   48k  ⣀⣠⣤⣴⣶⣶⣿⣿   3m  Map every caller of the billing webhook handl…
+✓ feature-dev:code-…  opus 4.5   131k    ⢀⣠⣤⣶⣿⣿  10m  Review the retry policy diff
+✗ docs                sonnet      920         ⣸   4m  Read the Stripe idempotency key documentation
+```
+
+The directory, the branch and the pull request are clickable links (OSC 8) in terminals that support them, such as Kitty, WezTerm or iTerm2. If they show but do not open, start Claude Code with `FORCE_HYPERLINK=1`. Turn them off with the `links` segment.
 
 On first run, if data still exists at the old location
 (`~/.local/share/ccstatusline-godlike/` or `~/.local/share/statusline-godlike/`,
@@ -85,6 +103,12 @@ loss, real cost history is preserved.
 |---|---|---|---|
 | `mood` | 1 | always on | ASCII mood that reacts to context, cost, and quotas, the first warning signal, before you even read a number |
 | `dir` / `git` / `model` | 1 | always on | identity: directory, branch + diff (`+ins -del`), active model, the essential baseline |
+| `pullRequest` | 1 | on, silent if absent | the open pull request of the branch and its review state: `#128 ✓` approved, `●` pending, `✗` changes requested, `◌` draft |
+| `effort` | 1 | on, silent if absent | reasoning effort of the session (`high`, `xhigh`...), right after the model |
+| `fastMode` | 1 | on, silent if off | `↯fast` while fast mode is on |
+| `thinking` | 1 | **off** | `✦` while extended thinking is on |
+| `motion` | all | on | everything that moves with the clock: blink, travelling separator, pulse, flicker, gradient drift. Switch it off for a still line |
+| `links` | 1 | on | makes directory, branch and pull request clickable, switch it off if your terminal prints the escape codes |
 | `sessions` | 1 | on | number of Claude Code sessions seen on this project in the last 5 minutes (shown only if >1), so you don't step on your own toes across tabs |
 | `night` | 1 | on | `☾` between 1am and 5am local time, a quiet reminder that it's late |
 | `worktree` | 1 | on, silent if absent | current git worktree name (`workspace.git_worktree`), useful in multi-branch dev |
@@ -218,7 +242,7 @@ The hardening here is deliberate.
 - **Terminal injection is neutralised.** Every externally-sourced label ,
   directory, branch, worktree, session name, agent name, output style, vim
   mode, model, is stripped of control characters before rendering
-  (`src/lib/sanitize.ts`). Without this, a cloned repository containing a
+  (`src/terminal/sanitize.ts`). Without this, a cloned repository containing a
   directory whose name embeds a raw `ESC` could emit an OSC sequence to
   rewrite your window title, a CSI to clear the screen, or a bare `CR` to
   hide the start of the line. Git rejects control characters in refnames,
@@ -231,7 +255,7 @@ The hardening here is deliberate.
   interpolation, never `sh -c`; every SQLite query uses bound parameters.
 - **A malformed payload degrades one segment, not the whole line.** The
   stdin payload goes through a zod schema where every field fails on its
-  own (`src/lib/payload.ts`): a string where a number belongs, a negative
+  own (`src/statusline/payload.ts`): a string where a number belongs, a negative
   duration, or `1e308` is rejected rather than clamped, because a clamped
   absurd value would still be written to the cost history and poison the
   day/week totals for 30 days. The limits cache, the API answer and
@@ -255,7 +279,7 @@ Width is resolved via `CCWATERMELON_WIDTH` → `process.stdout.columns` →
 `$COLUMNS` → `80`, never via `tput` (that's exactly the bug that breaks
 ccstatusline on Windows by creating a `null` file).
 
-Visual width calculation (`src/lib/width.ts`) is not `string.length`: ANSI
+Visual width calculation (`src/terminal/width.ts`) is not `string.length`: ANSI
 codes are ignored, emoji and CJK characters count as double-width,
 combining marks and variation selectors count as zero, and Nerd Font
 glyphs (Unicode private-use plane) count as single-width, matching how
@@ -277,13 +301,16 @@ then the projection, then the countdown.
   of eight, and color (sky → peach → red by threshold) carries the rest.
   Constant length, variable information: that's the guiding principle
   behind the whole statusline.
-- **Motion only moves when Claude Code redraws.** The statusline is
-  redrawn on a Claude Code event (new message, tool call), never
-  continuously, so nothing here runs on a timer. Two things advance one
-  step per second of wall clock, and only show when a redraw happens: the
-  glyph of a gauge past its alert threshold alternates between red and pink,
-  which is what catches the eye, and the gradient on a cost past a
-  milestone drifts.
+- **Motion is tied to the wall clock, not to a loop.** The script never
+  stays alive: every render picks its frame from the current second, so
+  each animation is designed for one frame per second, the fastest
+  Claude Code allows. The mood blinks one second in five, one separator
+  lights up and travels along the lines to show the line is live, the
+  glyph of a gauge past its alert threshold alternates between red and
+  pink, the burn rate flickers, the gradient on a cost past a milestone
+  drifts, and a reset less than five minutes away counts in seconds.
+  With `refreshInterval` they run continuously, without it they advance
+  whenever Claude Code redraws. The `motion` segment turns them all off.
 - **Context is measured against the compaction threshold, not the raw
   window.** `contextGauge` compares tokens used to the real auto-compact
   threshold, not `context_window_size`: the `autoCompactWindow` token

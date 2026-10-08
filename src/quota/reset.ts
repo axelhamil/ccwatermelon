@@ -1,4 +1,5 @@
 const DAY_MINUTES = 1440;
+const IMMINENT_SEC = 300;
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 function twoDigits(n: number): string {
@@ -37,9 +38,13 @@ export function resetOf(resetsAt: number | null, nowMs: number): Reset | null {
 	if (!Number.isFinite(secondsLeft) || secondsLeft <= 0) return null;
 
 	const totalMinutes = Math.ceil(secondsLeft / 60);
+	const isImminent = secondsLeft < IMMINENT_SEC;
+	const seconds = Math.floor(secondsLeft);
 
 	return {
-		countdown: `↺${countdown(totalMinutes)}`,
+		countdown: isImminent
+			? `↺${Math.floor(seconds / 60)}m${twoDigits(seconds % 60)}s`
+			: `↺${countdown(totalMinutes)}`,
 		clock: `(${localClock(resetsAt, totalMinutes)})`,
 	};
 }
