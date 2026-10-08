@@ -11,15 +11,22 @@
 		"config": "bun run src/cli.ts",
 		"test": "bun test",
 		"lint": "biome check .",
-		"format": "biome format --write ."
+		"typecheck": "tsc --noEmit",
+		"knip": "knip",
+		"format": "biome format --write .",
+		"prepare": "husky"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^1.9.4",
-		"@types/bun": "latest",
-		"typescript": "^5.6.0"
+		"@biomejs/biome": "^2.5.15",
+		"@commitlint/cli": "^21.2.3",
+		"@commitlint/config-conventional": "^21.2.3",
+		"@types/bun": "^1.4.2",
+		"husky": "^9.1.7",
+		"knip": "^6.40.0",
+		"typescript": "^7.0.2"
 	},
 	"dependencies": {
-		"zod": "^4.4.3"
+		"zod": "^4.6.5"
 	},
 	"license": "MIT",
 	"description": "A fast, configurable Claude Code statusline: context, cost history and rate-limit gauges at a glance.",
@@ -27,5 +34,11 @@
 		"type": "git",
 		"url": "git+https://github.com/axelhamil/ccwatermelon.git"
 	},
-	"keywords": ["claude-code", "statusline", "cli", "bun", "terminal"]
+	"keywords": [
+		"claude-code",
+		"statusline",
+		"cli",
+		"bun",
+		"terminal"
+	]
 }
