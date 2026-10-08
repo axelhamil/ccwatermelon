@@ -1,5 +1,5 @@
 {
 	"$schema": "https://unpkg.com/knip@6/schema.json",
 	"entry": ["src/refresh-limits.ts"],
-	"project": ["src/**/*.ts", "__tests__/**/*.ts"]
+	"project": ["src/**/*.ts", "scripts/**/*.ts", "__tests__/**/*.ts"]
 }
