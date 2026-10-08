@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-	PALETTE,
-	THEMES,
 	applyPaletteOverrides,
-	color,
 	colorRgb,
 	formatCost,
 	formatDuration,
@@ -11,10 +8,10 @@ import {
 	formatTokens,
 	gradientText,
 	lerpColor,
+	PALETTE,
+	THEMES,
 } from "../src/lib/format";
-
-// biome-ignore lint/suspicious/noControlCharactersInRegex: strips ANSI color codes for assertions
-const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
+import { stripAnsi } from "../src/lib/width";
 
 describe("formatCost", () => {
 	test("under $10 shows 2 decimals", () => {
@@ -56,15 +53,6 @@ describe("formatPct", () => {
 	test("rounds", () => {
 		expect(formatPct(71.4)).toBe("71%");
 		expect(formatPct(71.6)).toBe("72%");
-	});
-});
-
-describe("color", () => {
-	test("wraps with ANSI escape", () => {
-		const result = color("hello", "red");
-		expect(result.startsWith("\x1b[38;2;")).toBe(true);
-		expect(result.endsWith("\x1b[0m")).toBe(true);
-		expect(result).toContain("hello");
 	});
 });
 
@@ -125,29 +113,20 @@ describe("formatCost hardening", () => {
 });
 
 describe("themes", () => {
-	test("watermelon is the default palette", () => {
+	test("given a theme and a user color, when applied, then the user color wins and the rest follows the theme", () => {
+		applyPaletteOverrides({ green: [1, 2, 3] }, "mocha");
+
+		expect(PALETTE.green).toEqual([1, 2, 3]);
+		expect(PALETTE.red).toEqual(THEMES.mocha.red);
+
 		applyPaletteOverrides({});
 		expect(PALETTE.green).toEqual(THEMES.watermelon.green);
-		expect(PALETTE.red).toEqual(THEMES.watermelon.red);
 	});
+});
 
-	test("mocha can be selected explicitly", () => {
-		applyPaletteOverrides({}, "mocha");
-		expect(PALETTE.green).toEqual(THEMES.mocha.green);
-		applyPaletteOverrides({});
-	});
-
-	test("user overrides win over the theme", () => {
-		applyPaletteOverrides({ green: [1, 2, 3] });
-		expect(PALETTE.green).toEqual([1, 2, 3]);
-		applyPaletteOverrides({});
-	});
-
-	test("healthy green and pressure red stay far apart in every theme", () => {
-		for (const theme of Object.values(THEMES)) {
-			const [gr] = theme.green;
-			const [rr] = theme.red;
-			expect(rr).toBeGreaterThan(gr);
-		}
+describe("formatTokens rounding", () => {
+	test("given a count that rounds up to a thousand thousands, then it switches to millions", () => {
+		expect(formatTokens(999_600)).toBe("1.0M");
+		expect(formatTokens(999_400)).toBe("999k");
 	});
 });

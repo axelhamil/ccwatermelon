@@ -1,35 +1,17 @@
-import { readFileSync } from "node:fs";
+import { z } from "zod";
 import { CONFIG } from "../config";
+import { readJsonFile } from "./json";
 
-let cached: number | null | undefined;
+const SettingsSchema = z.object({
+	autoCompactEnabled: z.boolean().optional().catch(undefined),
+	autoCompactWindow: z.number().positive().optional().catch(undefined),
+});
 
-function readSettings(): { autoCompactEnabled?: boolean; autoCompactWindow?: number } {
-	try {
-		return JSON.parse(readFileSync(CONFIG.paths.settings, "utf-8"));
-	} catch (err) {
-		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-			console.error(`ccwatermelon: settings.json unreadable — ${err}`);
-		}
-		return {};
-	}
-}
+export function compactThreshold(contextWindowSize: number, reserveRatio: number): number | null {
+	const settings = readJsonFile(CONFIG.paths.settings, SettingsSchema, "Claude Code settings");
+	if (settings?.autoCompactEnabled === false) return null;
 
-export function compactThreshold(
-	contextWindowSize: number,
-	reserveRatio: number = CONFIG.compaction.reserveRatio,
-): number | null {
-	if (cached !== undefined) return cached;
-	const settings = readSettings();
-	if (settings.autoCompactEnabled === false) {
-		cached = null;
-		return cached;
-	}
-	const window = contextWindowSize || CONFIG.compaction.fallbackWindow;
-	const safeRatio =
-		Number.isFinite(reserveRatio) && reserveRatio > 0
-			? reserveRatio
-			: CONFIG.compaction.reserveRatio;
-	const ceiling = Math.round(window * safeRatio);
-	cached = settings.autoCompactWindow ? Math.min(settings.autoCompactWindow, ceiling) : ceiling;
-	return cached;
+	const ceiling = Math.round(contextWindowSize * reserveRatio);
+
+	return settings?.autoCompactWindow ? Math.min(settings.autoCompactWindow, ceiling) : ceiling;
 }

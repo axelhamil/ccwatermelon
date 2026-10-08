@@ -1,145 +1,172 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { z } from "zod";
 import { CONFIG } from "../config";
-import type { HookInput, UsageLimit } from "./types";
+import { readJsonFile } from "./json";
+import type { Payload } from "./payload";
+import type { UsageLimit, UsageLimits } from "./types";
 
 const API_URL = "https://api.anthropic.com/api/oauth/usage";
-const CRED_PATH = join(homedir(), ".claude", ".credentials.json");
+const EMPTY_LIMITS: UsageLimits = { five_hour: null, seven_day: null };
 
-export interface UsageLimits {
-	five_hour: UsageLimit | null;
-	seven_day: UsageLimit | null;
-}
-
-interface CachedResponse {
-	fetchedAt: number;
-	data: UsageLimits;
-}
-
-function getToken(): string | null {
-	try {
-		const raw = readFileSync(CRED_PATH, "utf-8");
-		return JSON.parse(raw)?.claudeAiOauth?.accessToken ?? null;
-	} catch (err) {
-		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-			console.error(`ccwatermelon: credentials unreadable — ${err}`);
-		}
-		return null;
-	}
-}
-
-function readCache(): CachedResponse | null {
-	try {
-		const raw = readFileSync(CONFIG.paths.limitsCache, "utf-8");
-		return JSON.parse(raw);
-	} catch (err) {
-		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-			console.error(`ccwatermelon: limits cache unreadable — ${err}`);
-		}
-		return null;
-	}
-}
-
-function writeCache(data: UsageLimits, now: number): void {
-	mkdirSync(dirname(CONFIG.paths.limitsCache), { recursive: true });
-	writeFileSync(CONFIG.paths.limitsCache, JSON.stringify({ fetchedAt: now, data }), "utf-8");
-}
+type ResetsAt = number | string | null | undefined;
 
 function clampPct(value: number): number {
-	if (!Number.isFinite(value)) return 0;
 	return Math.round(Math.min(Math.max(value, 0), 100));
 }
 
-export function limitsFromPayload(rateLimits: HookInput["rate_limits"]): UsageLimits | null {
-	const fh = rateLimits?.five_hour;
-	const sd = rateLimits?.seven_day;
-	if (fh?.used_percentage === undefined && sd?.used_percentage === undefined) return null;
+function toEpochSeconds(resetsAt: ResetsAt): number | null {
+	if (typeof resetsAt === "number") return resetsAt;
+	if (typeof resetsAt !== "string") return null;
+
+	const ms = Date.parse(resetsAt);
+
+	return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
+}
+
+const UsageWindowSchema = z
+	.object({
+		utilization: z.number(),
+		resets_at: z.union([z.number(), z.string()]).nullish(),
+	})
+	.transform(
+		(window): UsageLimit => ({
+			utilization: clampPct(window.utilization),
+			resets_at: toEpochSeconds(window.resets_at),
+		}),
+	)
+	.nullish()
+	.catch(null)
+	.transform((window) => window ?? null);
+
+const UsageLimitsSchema = z.object({ five_hour: UsageWindowSchema, seven_day: UsageWindowSchema });
+
+const CachedLimitsSchema = z.object({ fetchedAt: z.number(), data: UsageLimitsSchema });
+
+const CredentialsSchema = z.object({
+	claudeAiOauth: z.object({ accessToken: z.string().min(1) }),
+});
+
+function readCache() {
+	return readJsonFile(CONFIG.paths.limitsCache, CachedLimitsSchema, "limits cache");
+}
+
+function writeCache(data: UsageLimits, now: number): void {
+	const target = CONFIG.paths.limitsCache;
+	const draft = `${target}.${process.pid}.tmp`;
+
+	mkdirSync(dirname(target), { recursive: true });
+	writeFileSync(draft, JSON.stringify({ fetchedAt: now, data }), "utf-8");
+	renameSync(draft, target);
+}
+
+function windowFromPayload(
+	window: NonNullable<Payload["rate_limits"]>["five_hour"],
+): UsageLimit | null {
+	if (window?.used_percentage === undefined) return null;
+
 	return {
-		five_hour:
-			fh?.used_percentage === undefined
-				? null
-				: { utilization: clampPct(fh.used_percentage), resets_at: fh.resets_at ?? null },
-		seven_day:
-			sd?.used_percentage === undefined
-				? null
-				: { utilization: clampPct(sd.used_percentage), resets_at: sd.resets_at ?? null },
+		utilization: clampPct(window.used_percentage),
+		resets_at: toEpochSeconds(window.resets_at),
 	};
 }
 
-const EMPTY_LIMITS: UsageLimits = { five_hour: null, seven_day: null };
-
-// The render path must never await the network: Claude Code kills the script
-// when a new render is triggered mid-execution. So we serve whatever the cache
-// holds — even stale — and hand the refresh to a detached process that will
-// have warmed the cache by the next render.
-export function limitsFromCache(now: number = Math.floor(Date.now() / 1000)): UsageLimits {
-	const cached = readCache();
-	if (cached && now - cached.fetchedAt < CONFIG.limits.cacheTtlSec) return cached.data;
-
-	spawnRefresh();
-	return cached?.data ?? EMPTY_LIMITS;
+function limitsFromPayload(rateLimits: Payload["rate_limits"]): UsageLimits {
+	return {
+		five_hour: windowFromPayload(rateLimits?.five_hour),
+		seven_day: windowFromPayload(rateLimits?.seven_day),
+	};
 }
 
 function spawnRefresh(): void {
 	try {
-		const proc = Bun.spawn([process.execPath, join(import.meta.dir, "..", "refresh-limits.ts")], {
+		const refreshScript = join(import.meta.dir, "..", "refresh-limits.ts");
+		const proc = Bun.spawn([process.execPath, refreshScript], {
 			stdin: "ignore",
 			stdout: "ignore",
-			stderr: "ignore",
+			stderr: Bun.file(CONFIG.paths.refreshLog),
 		});
 		proc.unref();
 	} catch (err) {
-		console.error(`ccwatermelon: limits refresh could not be spawned — ${err}`);
+		console.error(`ccwatermelon: the limits refresh process could not start: ${err}`);
 	}
 }
 
-export async function getUsageLimits(
-	now: number = Math.floor(Date.now() / 1000),
-): Promise<UsageLimits> {
-	const cached = readCache();
-	if (cached && now - cached.fetchedAt < CONFIG.limits.cacheTtlSec) {
-		return cached.data;
-	}
-
-	const token = getToken();
-	if (!token) {
-		return EMPTY_LIMITS;
-	}
-
+function claimRefresh(lastKnown: UsageLimits, now: number): void {
 	try {
-		const response = await fetch(API_URL, {
-			headers: {
-				Authorization: `Bearer ${token}`,
-				"anthropic-beta": "oauth-2025-04-20",
-				"Content-Type": "application/json",
-			},
-			signal: AbortSignal.timeout(CONFIG.limits.fetchTimeoutMs),
-		});
-		if (!response.ok) {
-			return cached?.data ?? { five_hour: null, seven_day: null };
-		}
-		const data = (await response.json()) as UsageLimits;
-		const normalized: UsageLimits = {
-			five_hour:
-				data.five_hour && Number.isFinite(data.five_hour.utilization)
-					? {
-							utilization: clampPct(data.five_hour.utilization),
-							resets_at: data.five_hour.resets_at,
-						}
-					: null,
-			seven_day:
-				data.seven_day && Number.isFinite(data.seven_day.utilization)
-					? {
-							utilization: clampPct(data.seven_day.utilization),
-							resets_at: data.seven_day.resets_at,
-						}
-					: null,
-		};
-		writeCache(normalized, now);
-		return normalized;
+		writeCache(lastKnown, now);
 	} catch (err) {
-		console.error(`ccwatermelon: usage limits fetch failed — ${err}`);
-		return cached?.data ?? { five_hour: null, seven_day: null };
+		console.error(`ccwatermelon: the limits cache is not writable, refreshing anyway: ${err}`);
+	}
+}
+
+function resetIfExpired(window: UsageLimit | null, now: number): UsageLimit | null {
+	const hasExpired = window !== null && window.resets_at !== null && window.resets_at <= now;
+
+	return hasExpired ? { utilization: 0, resets_at: null } : window;
+}
+
+function limitsFromCache(now: number, refresh: () => void): UsageLimits {
+	const cached = readCache();
+	const lastKnown = cached?.data ?? EMPTY_LIMITS;
+	const isFresh = cached !== null && now - cached.fetchedAt < CONFIG.limits.cacheTtlSec;
+	if (isFresh) return lastKnown;
+
+	claimRefresh(lastKnown, now);
+	refresh();
+
+	return lastKnown;
+}
+
+export function resolveLimits(
+	rateLimits: Payload["rate_limits"],
+	now: number,
+	refresh: () => void = spawnRefresh,
+): UsageLimits {
+	const live = limitsFromPayload(rateLimits);
+	const cached = live.five_hour && live.seven_day ? EMPTY_LIMITS : limitsFromCache(now, refresh);
+
+	return {
+		five_hour: resetIfExpired(live.five_hour ?? cached.five_hour, now),
+		seven_day: resetIfExpired(live.seven_day ?? cached.seven_day, now),
+	};
+}
+
+async function fetchLimits(): Promise<UsageLimits | null> {
+	const credentials = readJsonFile(CONFIG.paths.credentials, CredentialsSchema, "credentials");
+	if (!credentials) return null;
+
+	const response = await fetch(API_URL, {
+		headers: {
+			Authorization: `Bearer ${credentials.claudeAiOauth.accessToken}`,
+			"anthropic-beta": "oauth-2025-04-20",
+			"Content-Type": "application/json",
+		},
+		signal: AbortSignal.timeout(CONFIG.limits.fetchTimeoutMs),
+	});
+	if (!response.ok) {
+		console.error(`ccwatermelon: the usage API answered ${response.status}, keeping cached limits`);
+		return null;
+	}
+
+	const parsed = UsageLimitsSchema.safeParse(await response.json());
+	if (!parsed.success) {
+		console.error(
+			"ccwatermelon: the usage API answered an unexpected shape, keeping cached limits",
+		);
+		return null;
+	}
+
+	return parsed.data;
+}
+
+export async function refreshLimits(now: number = Math.floor(Date.now() / 1000)): Promise<void> {
+	try {
+		const limits = await fetchLimits();
+		if (limits) writeCache(limits, now);
+	} catch (err) {
+		console.error(
+			`ccwatermelon: the usage limits could not be refreshed, keeping the cache: ${err}`,
+		);
 	}
 }

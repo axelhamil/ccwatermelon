@@ -1,4 +1,4 @@
-const DEFAULT_PALETTE = {
+const MOCHA_PALETTE = {
 	text: [205, 214, 244],
 	subtext: [166, 173, 200],
 	dim: [108, 112, 134],
@@ -14,13 +14,9 @@ const DEFAULT_PALETTE = {
 	pink: [245, 194, 231],
 } as const;
 
-export type ColorName = keyof typeof DEFAULT_PALETTE;
+export type ColorName = keyof typeof MOCHA_PALETTE;
 export type Rgb = readonly [number, number, number];
 
-// Watermelon: rind green for healthy gauges, flesh red for pressure, with the
-// pale rind and seed-dark greys carrying the quiet text. The fruit's own
-// gradient happens to match the semantics already in place — green when there
-// is room left, red when there is not.
 const WATERMELON_PALETTE = {
 	text: [244, 240, 226],
 	subtext: [168, 198, 159],
@@ -39,21 +35,19 @@ const WATERMELON_PALETTE = {
 
 export const THEMES = {
 	watermelon: WATERMELON_PALETTE,
-	mocha: DEFAULT_PALETTE,
+	mocha: MOCHA_PALETTE,
 } as const;
 
 export type ThemeName = keyof typeof THEMES;
 
 export const PALETTE: Record<ColorName, Rgb> = { ...WATERMELON_PALETTE };
 
-// Applies the selected theme, then user color overrides on top of it.
-// Called once at startup, never on a per-render basis.
 export function applyPaletteOverrides(
 	overrides: Record<string, Rgb>,
 	theme: ThemeName = "watermelon",
 ): void {
 	const base = THEMES[theme] ?? WATERMELON_PALETTE;
-	for (const key of Object.keys(DEFAULT_PALETTE) as ColorName[]) {
+	for (const key of Object.keys(MOCHA_PALETTE) as ColorName[]) {
 		PALETTE[key] = overrides[key] ?? base[key];
 	}
 }
@@ -111,8 +105,6 @@ export function gradientText(text: string): string {
 		.join("");
 }
 
-// A statusline has no room for scientific notation: anything past six figures
-// is a broken payload, not a real bill, and must not blow the layout apart.
 const COST_DISPLAY_CEILING = 999_999;
 
 export function formatCost(usd: number): string {
@@ -136,7 +128,10 @@ export function formatDuration(ms: number): string {
 export function formatTokens(n: number): string {
 	const safe = Number.isFinite(n) ? Math.max(0, n) : 0;
 	if (safe < 1000) return `${Math.round(safe)}`;
-	if (safe < 1_000_000) return `${Math.round(safe / 1000)}k`;
+
+	const thousands = Math.round(safe / 1000);
+	if (thousands < 1000) return `${thousands}k`;
+
 	return `${(safe / 1_000_000).toFixed(1)}M`;
 }
 

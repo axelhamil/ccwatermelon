@@ -5,32 +5,52 @@ export interface Chunk {
 	priority: number;
 }
 
-// Concatenates chunks (each chunk owns its own leading separator/spacing)
-// and, if the result overflows `width`, drops chunks lowest-priority-first
-// until it fits or only priority Infinity ("core") chunks remain.
+export interface Part {
+	full: string;
+	compact?: string;
+	priority: number;
+}
+
+function byPriority<T extends { priority: number }>(items: T[]): T[] {
+	return [...items].sort((a, b) => a.priority - b.priority);
+}
+
 export function fitChunks(core: string, optional: Chunk[], width: number): string {
-	const sorted = [...optional].sort((a, b) => a.priority - b.priority);
-	const dropped = new Set<number>();
+	const dropped = new Set<Chunk>();
+	const compose = () =>
+		core +
+		optional
+			.filter((chunk) => !dropped.has(chunk))
+			.map((chunk) => chunk.text)
+			.join("");
 
-	const compose = (): string => {
-		return (
-			core +
-			optional
-				.filter((_, i) => !dropped.has(i))
-				.map((c) => c.text)
-				.join("")
-		);
-	};
-
-	let result = compose();
-	let cursor = 0;
-	while (visualWidth(result) > width && cursor < sorted.length) {
-		const victim = sorted[cursor];
-		cursor++;
-		if (!victim) continue;
-		const idx = optional.indexOf(victim);
-		if (idx >= 0) dropped.add(idx);
-		result = compose();
+	for (const victim of byPriority(optional)) {
+		if (visualWidth(compose()) <= width) break;
+		dropped.add(victim);
 	}
-	return result;
+
+	return compose();
+}
+
+export function fitParts(prefix: string, parts: Part[], separator: string, width: number): string {
+	const compacted = new Set<Part>();
+	const dropped = new Set<Part>();
+	const compose = () =>
+		prefix +
+		parts
+			.filter((part) => !dropped.has(part))
+			.map((part) => (compacted.has(part) ? (part.compact ?? part.full) : part.full))
+			.join(separator);
+
+	const ranked = byPriority(parts);
+	const shrinkSteps = [
+		...ranked.map((part) => () => compacted.add(part)),
+		...ranked.slice(0, -1).map((part) => () => dropped.add(part)),
+	];
+	for (const shrink of shrinkSteps) {
+		if (visualWidth(compose()) <= width) break;
+		shrink();
+	}
+
+	return compose();
 }

@@ -1,34 +1,36 @@
 import { describe, expect, test } from "bun:test";
 import { forecastEta } from "../src/lib/forecast";
 
+const everyMinute = (values: number[]) => values.map((value, i) => ({ sampled_at: i * 60, value }));
+
 describe("forecastEta", () => {
-	test("needs 3+ points", () => {
-		expect(forecastEta([50], 100)).toEqual({ minutes: null, cooling: false });
-		expect(forecastEta([50, 60], 100)).toEqual({ minutes: null, cooling: false });
+	test("given fewer than 3 samples, then there is no forecast", () => {
+		expect(forecastEta(everyMinute([50, 60]), 100)).toEqual({ minutes: null, cooling: false });
 	});
 
-	test("constant series → null minutes, not cooling", () => {
-		const r = forecastEta([50, 50, 50, 50, 50, 50, 50, 50], 100);
-		expect(r.minutes).toBeNull();
-		expect(r.cooling).toBe(false);
+	test("given usage climbing 5 points a minute from 85, then the limit is 3 minutes away", () => {
+		expect(forecastEta(everyMinute([70, 75, 80, 85]), 100)).toEqual({ minutes: 3, cooling: false });
 	});
 
-	test("ascending → minutes to 100", () => {
-		// +5%/min → reaches 100 in 10 min from 50
-		const r = forecastEta([50, 55, 60, 65, 70, 75, 80, 85], 100);
-		expect(r.minutes).toBeGreaterThan(2);
-		expect(r.minutes).toBeLessThan(4);
-		expect(r.cooling).toBe(false);
+	test("given the same climb seen across idle gaps, then the forecast follows real elapsed time", () => {
+		const sparse = [
+			{ sampled_at: 0, value: 70 },
+			{ sampled_at: 600, value: 80 },
+			{ sampled_at: 1200, value: 90 },
+		];
+
+		expect(forecastEta(sparse, 100)).toEqual({ minutes: 10, cooling: false });
 	});
 
-	test("descending → null minutes, cooling=true", () => {
-		const r = forecastEta([80, 70, 60, 50, 40, 30, 20, 10], 100);
-		expect(r.minutes).toBeNull();
-		expect(r.cooling).toBe(true);
+	test("given flat usage, then there is no forecast and no cooling", () => {
+		expect(forecastEta(everyMinute([50, 50, 50]), 100)).toEqual({ minutes: null, cooling: false });
 	});
 
-	test("already over target → 0 minutes", () => {
-		const r = forecastEta([90, 95, 100, 102, 104, 106, 108, 110], 100);
-		expect(r.minutes).toBe(0);
+	test("given falling usage, then it reports cooling", () => {
+		expect(forecastEta(everyMinute([90, 80, 70]), 100)).toEqual({ minutes: null, cooling: true });
+	});
+
+	test("given usage already at the target and still climbing, then the limit is now", () => {
+		expect(forecastEta(everyMinute([98, 99, 100]), 100)).toEqual({ minutes: 0, cooling: false });
 	});
 });

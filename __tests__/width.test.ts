@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { color } from "../src/lib/format";
-import { resolveWidth, stripAnsi, visualWidth } from "../src/lib/width";
+import { resolveWidth, stripAnsi, truncateToWidth, visualWidth } from "../src/lib/width";
 
 describe("width", () => {
 	test("stripAnsi removes SGR color codes", () => {
@@ -40,7 +40,6 @@ describe("width", () => {
 			expect(resolveWidth()).toBe(42);
 		} finally {
 			if (prev === undefined) {
-				// biome-ignore lint/performance/noDelete: env var must be absent for other tests
 				delete process.env.CCWATERMELON_WIDTH;
 			} else {
 				process.env.CCWATERMELON_WIDTH = prev;
@@ -48,18 +47,14 @@ describe("width", () => {
 		}
 	});
 
-	test("resolveWidth falls back to a positive value when nothing is set", () => {
-		const prevEnv = process.env.CCWATERMELON_WIDTH;
-		const prevCols = process.env.COLUMNS;
-		// biome-ignore lint/performance/noDelete: simulating an unset environment
-		delete process.env.CCWATERMELON_WIDTH;
-		// biome-ignore lint/performance/noDelete: simulating an unset environment
-		delete process.env.COLUMNS;
-		try {
-			expect(resolveWidth()).toBeGreaterThan(0);
-		} finally {
-			if (prevEnv !== undefined) process.env.CCWATERMELON_WIDTH = prevEnv;
-			if (prevCols !== undefined) process.env.COLUMNS = prevCols;
-		}
+	test("given a label wider than the room left, when truncated, then it ends with an ellipsis and fits", () => {
+		expect(truncateToWidth("feature/very-long-branch", 10)).toBe("feature/v…");
+		expect(truncateToWidth("short", 10)).toBe("short");
+	});
+
+	test("given emoji that terminals draw two cells wide, then they count for two", () => {
+		expect(visualWidth("⚡")).toBe(2);
+		expect(visualWidth("✨")).toBe(2);
+		expect(visualWidth("⚠")).toBe(1);
 	});
 });

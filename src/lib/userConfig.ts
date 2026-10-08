@@ -2,7 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import type { ThemeName } from "./format";
+import type { Rgb, ThemeName } from "./format";
+import type { SegmentConfig } from "./segments";
 
 const RgbTupleSchema = z.tuple([
 	z.number().int().min(0).max(255),
@@ -47,13 +48,12 @@ export interface ResolvedConfig {
 		sevenDayAlert: number;
 		compactionReserveRatio: number;
 	};
-	colors: Record<string, readonly [number, number, number]>;
-	segments: Record<string, { enabled?: boolean; line?: 1 | 2; priority?: number }>;
+	colors: Record<string, Rgb>;
+	segments: SegmentConfig;
 }
 
 export interface LoadResult {
 	config: ResolvedConfig;
-	sources: string[];
 	errors: string[];
 }
 
@@ -69,9 +69,6 @@ const DEFAULTS: ResolvedConfig = {
 	segments: {},
 };
 
-// Strips // line comments and /* */ block comments while leaving string
-// contents (including "//" inside a string) untouched, so JSONC files parse
-// with plain JSON.parse afterwards.
 export function stripJsonComments(input: string): string {
 	let out = "";
 	let inString = false;
@@ -121,29 +118,29 @@ export function stripJsonComments(input: string): string {
 		}
 		out += ch;
 	}
+
 	return out;
 }
 
-function readConfigFile(path: string): { data: ConfigFile | null; error: string | null } {
+export function readConfigFile(path: string): { data: ConfigFile | null; error: string | null } {
 	if (!existsSync(path)) return { data: null, error: null };
+
 	try {
-		const raw = readFileSync(path, "utf-8");
-		const stripped = stripJsonComments(raw);
-		const json = JSON.parse(stripped);
+		const json = JSON.parse(stripJsonComments(readFileSync(path, "utf-8")));
 		const parsed = ConfigFileSchema.safeParse(json);
-		if (!parsed.success) {
-			return {
-				data: null,
-				error: `${path}: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
-			};
-		}
-		return { data: parsed.data, error: null };
+		if (parsed.success) return { data: parsed.data, error: null };
+
+		const issues = parsed.error.issues
+			.map((issue) => `${issue.path.join(".") || "root"}: ${issue.message}`)
+			.join(", ");
+
+		return { data: null, error: `${path} (${issues})` };
 	} catch (err) {
-		return { data: null, error: `${path}: ${err instanceof Error ? err.message : String(err)}` };
+		return { data: null, error: `${path} (${err instanceof Error ? err.message : String(err)})` };
 	}
 }
 
-function mergeConfig(base: ResolvedConfig, override: ConfigFile): ResolvedConfig {
+export function mergeConfig(base: ResolvedConfig, override: ConfigFile): ResolvedConfig {
 	return {
 		theme: override.theme ?? base.theme,
 		thresholds: { ...base.thresholds, ...override.thresholds },
@@ -152,36 +149,32 @@ function mergeConfig(base: ResolvedConfig, override: ConfigFile): ResolvedConfig
 	};
 }
 
-export function configSearchPaths(cwd: string): string[] {
-	const paths: string[] = [];
-	const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
-	if (claudeConfigDir) {
-		paths.push(join(claudeConfigDir, "ccwatermelon", "config.jsonc"));
-	}
-	paths.push(join(homedir(), ".config", "ccwatermelon", "config.jsonc"));
-	paths.push(join(cwd, ".ccwatermelon.jsonc"));
-	return paths;
+export function userConfigPath(): string {
+	return join(homedir(), ".config", "ccwatermelon", "config.jsonc");
 }
 
-export function loadUserConfig(cwd: string): LoadResult {
+function configSearchPaths(cwd: string): string[] {
+	const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
+	const claudeScoped = claudeConfigDir
+		? [join(claudeConfigDir, "ccwatermelon", "config.jsonc")]
+		: [];
+
+	return [...claudeScoped, userConfigPath(), join(cwd, ".ccwatermelon.jsonc")];
+}
+
+export function loadUserConfig(cwd: string, paths: string[] = configSearchPaths(cwd)): LoadResult {
 	let config = DEFAULTS;
-	const sources: string[] = [];
 	const errors: string[] = [];
 
-	for (const path of configSearchPaths(cwd)) {
+	for (const path of paths) {
 		const { data, error } = readConfigFile(path);
 		if (error) errors.push(error);
-		if (data) {
-			config = mergeConfig(config, data);
-			sources.push(path);
-		}
+		if (data) config = mergeConfig(config, data);
 	}
 
-	return { config, sources, errors };
+	return { config, errors };
 }
 
 export function defaultConfig(): ResolvedConfig {
 	return DEFAULTS;
 }
-
-export { ConfigFileSchema };

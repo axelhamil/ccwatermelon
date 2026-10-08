@@ -6,19 +6,17 @@ interface MigrationPair {
 	to: string;
 }
 
-// One-shot best-effort move from the project's former XDG paths to
-// the renamed `ccwatermelon` ones, preserving the real SQLite
-// history and sessions data. Never throws: a failed migration just means the
-// tool starts fresh at the new path, which is safe (not silent data loss —
-// the old file stays in place untouched).
 export function migrateLegacyPaths(pairs: MigrationPair[]): void {
 	for (const { from, to } of pairs) {
 		try {
 			if (!existsSync(from) || existsSync(to)) continue;
+
 			mkdirSync(dirname(to), { recursive: true });
 			renameSync(from, to);
 		} catch (err) {
-			console.error(`ccwatermelon: migration skipped for ${from} -> ${to}: ${err}`);
+			console.error(
+				`ccwatermelon: could not move ${from} to ${to}, starting fresh there instead: ${err}`,
+			);
 		}
 	}
 }

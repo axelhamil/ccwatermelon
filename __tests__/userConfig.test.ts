@@ -24,9 +24,8 @@ describe("loadUserConfig", () => {
 	test("returns defaults when no config file exists", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "ccstatusline-"));
 		dirs.push(cwd);
-		const { config, sources, errors } = loadUserConfig(cwd);
+		const { config, errors } = loadUserConfig(cwd, [join(cwd, ".ccwatermelon.jsonc")]);
 		expect(config.thresholds.compactAlert).toBe(85);
-		expect(sources.length).toBe(0);
 		expect(errors.length).toBe(0);
 	});
 
@@ -40,17 +39,16 @@ describe("loadUserConfig", () => {
 				"thresholds": { "compactAlert": 70 }
 			}`,
 		);
-		const { config, sources } = loadUserConfig(cwd);
+		const { config } = loadUserConfig(cwd, [join(cwd, ".ccwatermelon.jsonc")]);
 		expect(config.thresholds.compactAlert).toBe(70);
 		expect(config.thresholds.fiveHourAlert).toBe(90);
-		expect(sources.length).toBe(1);
 	});
 
 	test("invalid config falls back to defaults and reports an error, never throws", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "ccstatusline-"));
 		dirs.push(cwd);
 		writeFileSync(join(cwd, ".ccwatermelon.jsonc"), `{ "thresholds": { "compactAlert": 500 } }`);
-		const { config, errors } = loadUserConfig(cwd);
+		const { config, errors } = loadUserConfig(cwd, [join(cwd, ".ccwatermelon.jsonc")]);
 		expect(config.thresholds.compactAlert).toBe(85);
 		expect(errors.length).toBe(1);
 	});
@@ -59,7 +57,7 @@ describe("loadUserConfig", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "ccstatusline-"));
 		dirs.push(cwd);
 		writeFileSync(join(cwd, ".ccwatermelon.jsonc"), "{ not json`");
-		const { config, errors } = loadUserConfig(cwd);
+		const { config, errors } = loadUserConfig(cwd, [join(cwd, ".ccwatermelon.jsonc")]);
 		expect(config.thresholds.compactAlert).toBe(85);
 		expect(errors.length).toBe(1);
 	});

@@ -1,21 +1,23 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+#!/usr/bin/env bun
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import * as readline from "node:readline/promises";
-import { applyPaletteOverrides, color } from "./lib/format";
+import { applyPaletteOverrides, color, THEMES } from "./lib/format";
 import { render } from "./lib/render";
+import type { SegmentToggle } from "./lib/segments";
+import { RELOCATABLE_SEGMENT_IDS, SEGMENT_IDS } from "./lib/segments";
 import type { StatuslineData } from "./lib/types";
-import {
-	type ConfigFile,
-	type ResolvedConfig,
-	defaultConfig,
-	stripJsonComments,
-} from "./lib/userConfig";
+import type { ConfigFile } from "./lib/userConfig";
+import { defaultConfig, mergeConfig, readConfigFile, userConfigPath } from "./lib/userConfig";
 
-const CONFIG_PATH = join(homedir(), ".config", "ccwatermelon", "config.jsonc");
+const CONFIG_PATH = userConfigPath();
+const PREVIEW_WIDTH = 110;
+const RULE = "─".repeat(53);
+const THRESHOLD_KEYS = ["compactAlert", "fiveHourAlert", "sevenDayAlert"] as const;
+const NOW_SEC = Math.floor(Date.now() / 1000);
 
 const SAMPLE: StatuslineData = {
-	mood: { kind: "focus", face: "(•‿•)", label: null, color: "yellow" },
+	mood: { kind: "focus", face: "(•‿•)", color: "yellow" },
 	git: { branch: "feat/melon-config", dirty: true, insertions: 142, deletions: 38 },
 	modelName: "Opus 4.7",
 	dirName: "ccwatermelon",
@@ -26,23 +28,19 @@ const SAMPLE: StatuslineData = {
 	weekCost: 95.9,
 	contextPct: 55,
 	contextTokens: 110_000,
-	contextSeries: [40, 42, 45, 48, 50, 52, 54, 55],
 	compactPct: 55,
 	tokensToCompact: 74_000,
 	fiveHourPct: 20,
-	fiveHourResetsAt: Math.floor(Date.now() / 1000) + 3 * 3600 + 22 * 60,
-	fiveHourSeries: [15, 16, 17, 18, 19, 20, 20, 20],
+	fiveHourResetsAt: NOW_SEC + 3 * 3600 + 22 * 60,
 	sevenDayPct: 23,
-	sevenDayResetsAt: Math.floor(Date.now() / 1000) + 107 * 3600 + 18 * 60,
-	tokensPerSec: 113,
-	tokensPerSecSeries: [100, 105, 110, 113, 113, 113, 113, 113],
+	sevenDayResetsAt: NOW_SEC + 107 * 3600 + 18 * 60,
 	cacheHitPct: 41,
 	burnRatePerHr: null,
 	etaMinutes: null,
 	etaCooling: false,
 	alertMode: false,
 	celebrationMode: false,
-	sessionName: "godlike-config-session",
+	sessionName: "melon-config-session",
 	ccVersion: "2.1.0",
 	outputStyle: null,
 	worktree: null,
@@ -52,167 +50,135 @@ const SAMPLE: StatuslineData = {
 	agentName: null,
 };
 
-function loadWorkingConfig(): ConfigFile {
-	if (!existsSync(CONFIG_PATH)) return {};
-	try {
-		const raw = readFileSync(CONFIG_PATH, "utf-8");
-		return JSON.parse(stripJsonComments(raw));
-	} catch (err) {
-		console.error(`invalid config ignored (${err}), editing from defaults`);
-		return {};
-	}
-}
+type Editor = (rl: readline.Interface, file: ConfigFile) => Promise<void>;
+type Outcome = "continue" | "save" | "discard";
 
-function toResolved(file: ConfigFile): ResolvedConfig {
-	const defaults = defaultConfig();
-	return {
-		theme: file.theme ?? defaults.theme,
-		thresholds: { ...defaults.thresholds, ...file.thresholds },
-		colors: { ...defaults.colors, ...file.colors },
-		segments: { ...defaults.segments, ...file.segments },
-	};
-}
+function loadWorkingConfig(): ConfigFile | null {
+	const { data, error } = readConfigFile(CONFIG_PATH);
+	if (!error) return data ?? {};
 
-const SEGMENT_IDS = [
-	"sessions",
-	"night",
-	"worktree",
-	"vimMode",
-	"agentName",
-	"outputStyle",
-	"sessionName",
-	"ccVersion",
-	"linesChanged",
-	"today",
-	"week",
-	"burn",
-	"cache",
-	"tps",
-	"contextGauge",
-	"fiveHourGauge",
-	"sevenDayGauge",
-] as const;
-
-function preview(file: ConfigFile): string {
-	const resolved = toResolved(file);
-	applyPaletteOverrides(resolved.colors);
-	const prevWidth = process.env.CCWATERMELON_WIDTH;
-	process.env.CCWATERMELON_WIDTH = "110";
-	const out = render(SAMPLE, resolved.segments);
-	if (prevWidth === undefined) {
-		// biome-ignore lint/performance/noDelete: env var must be absent, not the string "undefined"
-		delete process.env.CCWATERMELON_WIDTH;
-	} else {
-		process.env.CCWATERMELON_WIDTH = prevWidth;
-	}
-	return out;
+	console.error(`the existing config is invalid, fix or delete it before editing: ${error}`);
+	return null;
 }
 
 function printPreview(file: ConfigFile): void {
-	console.log(`\n${color("── preview ──────────────────────────────────────────", "dim")}`);
-	console.log(preview(file));
-	console.log(`${color("─────────────────────────────────────────────────────", "dim")}\n`);
+	const resolved = mergeConfig(defaultConfig(), file);
+	applyPaletteOverrides(resolved.colors, resolved.theme);
+
+	console.log(`\n${color(`── preview ${RULE}`, "dim")}`);
+	console.log(render(SAMPLE, resolved.segments, PREVIEW_WIDTH));
+	console.log(`${color(RULE, "dim")}\n`);
 }
 
-async function menu(rl: readline.Interface, file: ConfigFile): Promise<boolean> {
-	printPreview(file);
-	console.log("1) Alert thresholds");
-	console.log("2) Enable/disable a segment");
-	console.log("3) Segment priority (drop order under reduced width)");
-	console.log("4) Line for a relocatable segment (1=identity, 2=economy)");
-	console.log("5) Save and exit");
-	console.log("6) Exit without saving");
-	const choice = (await rl.question("> ")).trim();
+async function pickSegment(rl: readline.Interface, ids: readonly string[]): Promise<string | null> {
+	console.log(ids.map((id, i) => `  ${i + 1}. ${id}`).join("\n"));
+	const answer = await rl.question("segment #: ");
 
-	switch (choice) {
-		case "1": {
-			const thresholds = file.thresholds ?? {};
-			for (const key of ["compactAlert", "fiveHourAlert", "sevenDayAlert"] as const) {
-				const current = thresholds[key] ?? defaultConfig().thresholds[key];
-				const raw = await rl.question(`${key} [${current}] : `);
-				if (raw.trim()) {
-					const n = Number.parseFloat(raw);
-					if (Number.isFinite(n) && n >= 0 && n <= 100) thresholds[key] = n;
-				}
-			}
-			file.thresholds = thresholds;
-			return true;
-		}
-		case "2": {
-			console.log(SEGMENT_IDS.map((id, i) => `  ${i + 1}. ${id}`).join("\n"));
-			const raw = await rl.question("segment #: ");
-			const idx = Number.parseInt(raw, 10) - 1;
-			const id = SEGMENT_IDS[idx];
-			if (!id) return true;
-			const answer = (await rl.question(`enable ${id}? (y/n) : `)).trim().toLowerCase();
-			file.segments = file.segments ?? {};
-			file.segments[id] = { ...file.segments[id], enabled: answer === "o" || answer === "y" };
-			return true;
-		}
-		case "3": {
-			console.log(SEGMENT_IDS.map((id, i) => `  ${i + 1}. ${id}`).join("\n"));
-			const raw = await rl.question("segment #: ");
-			const idx = Number.parseInt(raw, 10) - 1;
-			const id = SEGMENT_IDS[idx];
-			if (!id) return true;
-			const p = await rl.question("priority (number, higher = disappears last): ");
-			const n = Number.parseFloat(p);
-			if (Number.isFinite(n)) {
-				file.segments = file.segments ?? {};
-				file.segments[id] = { ...file.segments[id], priority: n };
-			}
-			return true;
-		}
-		case "4": {
-			const relocatable = [
-				"worktree",
-				"vimMode",
-				"agentName",
-				"outputStyle",
-				"sessionName",
-				"ccVersion",
-				"night",
-				"linesChanged",
-			];
-			console.log(relocatable.map((id, i) => `  ${i + 1}. ${id}`).join("\n"));
-			const raw = await rl.question("segment #: ");
-			const idx = Number.parseInt(raw, 10) - 1;
-			const id = relocatable[idx];
-			if (!id) return true;
-			const l = (await rl.question("line (1 or 2): ")).trim();
-			if (l === "1" || l === "2") {
-				file.segments = file.segments ?? {};
-				file.segments[id] = { ...file.segments[id], line: l === "1" ? 1 : 2 };
-			}
-			return true;
-		}
-		case "5":
-			return false;
-		case "6":
-			process.exit(0);
-			break;
-		default:
-			return true;
+	return ids[Number.parseInt(answer, 10) - 1] ?? null;
+}
+
+function patchSegment(file: ConfigFile, id: string, patch: SegmentToggle): void {
+	file.segments = { ...file.segments, [id]: { ...file.segments?.[id], ...patch } };
+}
+
+const editThresholds: Editor = async (rl, file) => {
+	const thresholds = { ...file.thresholds };
+
+	for (const key of THRESHOLD_KEYS) {
+		const current = thresholds[key] ?? defaultConfig().thresholds[key];
+		const answer = (await rl.question(`${key} [${current}] : `)).trim();
+		const value = Number.parseFloat(answer);
+		if (!answer) continue;
+
+		if (Number.isFinite(value) && value >= 0 && value <= 100) thresholds[key] = value;
+		else console.log(`${key} unchanged: "${answer}" is not a number between 0 and 100`);
 	}
-	return true;
+
+	file.thresholds = thresholds;
+};
+
+const toggleSegment: Editor = async (rl, file) => {
+	const id = await pickSegment(rl, SEGMENT_IDS);
+	if (!id) return;
+
+	const answer = (await rl.question(`enable ${id}? (y/n) : `)).trim().toLowerCase();
+	patchSegment(file, id, { enabled: answer === "y" });
+};
+
+const editPriority: Editor = async (rl, file) => {
+	const id = await pickSegment(rl, SEGMENT_IDS);
+	if (!id) return;
+
+	const priority = Number.parseFloat(
+		await rl.question("priority (number, higher = disappears last): "),
+	);
+	if (Number.isFinite(priority)) patchSegment(file, id, { priority });
+	else console.log(`${id} unchanged: the priority must be a number`);
+};
+
+const relocateSegment: Editor = async (rl, file) => {
+	const id = await pickSegment(rl, RELOCATABLE_SEGMENT_IDS);
+	if (!id) return;
+
+	const line = (await rl.question("line (1 or 2): ")).trim();
+	if (line === "1" || line === "2") patchSegment(file, id, { line: line === "1" ? 1 : 2 });
+	else console.log(`${id} unchanged: the line must be 1 or 2`);
+};
+
+const editTheme: Editor = async (rl, file) => {
+	const names = Object.keys(THEMES) as (keyof typeof THEMES)[];
+	const answer = (await rl.question(`theme (${names.join(" or ")}): `)).trim();
+	const theme = names.find((name) => name === answer);
+	if (theme) file.theme = theme;
+	else console.log(`theme unchanged: "${answer}" is not one of ${names.join(", ")}`);
+};
+
+const EDITORS: Record<string, { label: string; edit: Editor }> = {
+	"1": { label: "Alert thresholds", edit: editThresholds },
+	"2": { label: "Enable/disable a segment", edit: toggleSegment },
+	"3": { label: "Segment priority (drop order under reduced width)", edit: editPriority },
+	"4": { label: "Line for a relocatable segment (1=identity, 2=economy)", edit: relocateSegment },
+	"5": { label: "Theme", edit: editTheme },
+};
+
+async function menu(rl: readline.Interface, file: ConfigFile): Promise<Outcome> {
+	printPreview(file);
+	for (const [key, { label }] of Object.entries(EDITORS)) console.log(`${key}) ${label}`);
+	console.log("s) Save and exit");
+	console.log("q) Exit without saving");
+
+	const choice = (await rl.question("> ")).trim().toLowerCase();
+	if (choice === "s") return "save";
+	if (choice === "q") return "discard";
+
+	await EDITORS[choice]?.edit(rl, file);
+
+	return "continue";
 }
 
 async function main(): Promise<void> {
 	const file = loadWorkingConfig();
+	if (!file) {
+		process.exitCode = 1;
+		return;
+	}
+
 	const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
-	console.log(color("ccwatermelon — interactive config", "peach"));
+	console.log(color("ccwatermelon, interactive config", "peach"));
 	console.log(color(`file: ${CONFIG_PATH}`, "dim"));
 
-	let keepGoing = true;
-	while (keepGoing) {
-		keepGoing = await menu(rl, file);
-	}
+	let outcome: Outcome = "continue";
+	while (outcome === "continue") outcome = await menu(rl, file);
 	rl.close();
+	if (outcome === "discard") return;
 
 	mkdirSync(dirname(CONFIG_PATH), { recursive: true });
 	writeFileSync(CONFIG_PATH, JSON.stringify(file, null, 2), "utf-8");
 	console.log(color(`config saved: ${CONFIG_PATH}`, "green"));
 }
 
-main();
+main().catch((err) => {
+	console.error(`ccwatermelon-config stopped, nothing was saved: ${err}`);
+	process.exitCode = 1;
+});

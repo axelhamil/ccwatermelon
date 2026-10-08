@@ -1,43 +1,58 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const dataDir = process.env.CCWATERMELON_DATA_DIR ?? join(homedir(), ".local/share/ccwatermelon");
-const cacheDir = process.env.CCWATERMELON_CACHE_DIR ?? join(homedir(), ".cache/ccwatermelon");
-// Two rounds of renaming: statusline-godlike -> ccstatusline-godlike ->
-// ccwatermelon. Both older locations are still migrated so nobody loses their
-// cost history by upgrading late.
 const LEGACY_NAMES = ["ccstatusline-godlike", "statusline-godlike"] as const;
 
-const legacyPaths = LEGACY_NAMES.map((name) => ({
-	historyDb: join(homedir(), ".local/share", name, "history.db"),
-	sessionsJson: join(homedir(), ".local/share", name, "sessions.json"),
-	limitsCache: join(homedir(), ".cache", name, "limits.json"),
-}));
+function dataDir(): string {
+	return process.env.CCWATERMELON_DATA_DIR ?? join(homedir(), ".local/share/ccwatermelon");
+}
+
+function cacheDir(): string {
+	return process.env.CCWATERMELON_CACHE_DIR ?? join(homedir(), ".cache/ccwatermelon");
+}
+
+function claudeDir(): string {
+	return process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
+}
 
 export const CONFIG = {
 	paths: {
-		historyDb: join(dataDir, "history.db"),
-		sessionsJson: join(dataDir, "sessions.json"),
-		limitsCache: join(cacheDir, "limits.json"),
-		settings: join(homedir(), ".claude/settings.json"),
-		legacy: legacyPaths,
+		get historyDb() {
+			return join(dataDir(), "history.db");
+		},
+		get limitsCache() {
+			return join(cacheDir(), "limits.json");
+		},
+		get refreshLog() {
+			return join(cacheDir(), "refresh.log");
+		},
+		get settings() {
+			return join(claudeDir(), "settings.json");
+		},
+		get credentials() {
+			return join(claudeDir(), ".credentials.json");
+		},
+		get legacy() {
+			return LEGACY_NAMES.map((name) => ({
+				historyDb: join(homedir(), ".local/share", name, "history.db"),
+				limitsCache: join(homedir(), ".cache", name, "limits.json"),
+			}));
+		},
 	},
 	history: {
 		retentionMinutes: 30,
 		windowMinutes: 8,
 		costRetentionDays: 30,
 	},
-	thresholds: {
-		compactAlert: 85,
-		fiveHourAlert: 90,
-		sevenDayAlert: 80,
+	sessions: {
+		activeWindowSec: 300,
+		retentionSec: 86_400,
 	},
 	compaction: {
 		fallbackWindow: 200_000,
-		reserveRatio: 0.92,
 	},
 	limits: {
 		cacheTtlSec: 60,
 		fetchTimeoutMs: 3000,
 	},
-} as const;
+};
