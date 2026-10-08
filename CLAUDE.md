@@ -1,6 +1,6 @@
 # ccwatermelon
 
-Claude Code status line: JSON payload on stdin, 3 lines of ANSI out (4 in alert mode). Bun + TypeScript, one runtime dependency (zod).
+Claude Code status line: JSON payload on stdin, 3 lines of ANSI out (4 when the quotas do not fit on one). Bun + TypeScript, one runtime dependency (zod).
 
 ## This checkout is the live install
 
@@ -9,17 +9,19 @@ Claude Code status line: JSON payload on stdin, 3 lines of ANSI out (4 in alert 
 - Never run `src/index.ts` bare: it writes the payload's cost into the real history. Always sandbox it:
   `HOME=$T CLAUDE_CONFIG_DIR=$T CCWATERMELON_DATA_DIR=$T/data CCWATERMELON_CACHE_DIR=$T/cache COLUMNS=100 bun src/index.ts < fixtures/normal.json`
 - Never `git stash` or switch branch here while a session is open, the status line would run the other code.
-- A schema change in `src/lib/history.ts` migrates the real database on the next render: make it idempotent and check it with `sqlite3 -readonly` first.
+- A schema change in `src/lib/history.ts` migrates the real database on the next render: back it up (`sqlite3 history.db ".backup ..."`), make it idempotent, then check with `sqlite3 -readonly`.
+- Change a function signature and all its callers in one write. A half-applied edit runs live: a `History` method called with shifted arguments would write garbage into the real cost history.
 
 ## Commands
 
 - `bun test`: full suite, `bun test __tests__/x.test.ts` for one file
 - `bun run lint`: Biome check, `bunx biome check --write .` to fix
 - `bun run typecheck`, `bun run knip`
-- `bun run config`: interactive config CLI
+- `bun run config`: full-screen config editor (needs a TTY)
+- `bun run previews`: regenerate `docs/previews/*.svg` from the real renderer, CI fails if they are stale
 - Use `bun` and `bunx` only: `pnpm exec` drops a stray `pnpm-lock.yaml`.
 
-Done means the four checks are green. The `pre-commit` hook and CI run the same four, `commit-msg` enforces Conventional Commits.
+Done means the four checks are green, and `bun run previews` rerun when the output changed. Versions and tags come from semantic-release in CI, never by hand. The `pre-commit` hook and CI run the same four, `commit-msg` enforces Conventional Commits.
 
 ## Layout
 
@@ -30,10 +32,14 @@ Done means the four checks are green. The `pre-commit` hook and CI run the same 
 - `src/lib/limits.ts`: quotas from the payload, missing windows filled from the disk cache, detached refresh
 - `src/lib/segments.ts`: declarative table of the optional segments of lines 1 and 2
 - `src/lib/render.ts` + `fit.ts`: lines and width fitting
+- `src/lib/pressure.ts`: one alert threshold per gauge gives its level (warn 20 points below, panic halfway to 100), which drives colour, pulse and mood
+- `src/lib/editor.ts` (pure state and key handling) + `editorView.ts` (pure drawing) + `src/cli.ts` (raw-mode loop)
+- `scripts/previews.ts`: ANSI to animated SVG for the README
 
 ## Rules of this codebase
 
-- The 7-day gauge must never disappear: it has the highest priority on the gauge line and `fitParts` never drops the highest one.
+- The 7-day gauge must never disappear: the quotas share one line while it fits, otherwise one row each, and width then only removes columns (`COLUMN_SETS` in `render.ts`), the same ones on both rows so they stay aligned.
+- Claude Code trims leading spaces of a status line row: indent a continuation row with braille blanks (`\u{2800}`), never spaces.
 - No network and nothing slow on the render path, Claude Code kills the script when the next render starts. The usage API is only called by `src/refresh-limits.ts`, detached.
 - Everything read from outside (stdin, cache, API, `settings.json`, config) goes through a zod schema. A bad field degrades one segment, never the whole line.
 - No comments in code, no em dash or en dash anywhere (code, messages, README).

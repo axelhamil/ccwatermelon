@@ -1,22 +1,54 @@
 # ccwatermelon
 
-A Claude Code statusline: a 3-line dashboard (4 in alert mode), watermelon palette, Nerd Font glyphs, rendered in about 40ms end to end, Bun startup included.
+A Claude Code statusline: a 3-line dashboard, watermelon palette, rendered in about 40ms end to end, Bun startup included.
 
 Green rind while there is room left, red flesh when there isn't: the fruit's own gradient happens to be exactly the semantics a pressure gauge needs.
 
+![A session from the first prompt to the limit](docs/previews/session.svg)
+
+One session, from the first prompt to the limit. The mood turns, the gauges fill and change colour, the cost crosses its milestones, and when a threshold is passed a 4th line says what is about to happen and when.
+
+Every preview on this page is drawn by the real renderer (`bun run previews`). Nerd Font icons are left out of them, since a browser does not have the font.
+
+## Make it yours
+
+![One config file, six different status lines](docs/previews/custom.svg)
+
+A theme, your own colours, segments switched on, off or moved to the other line, stricter alerts: one JSONC file, per user or per project. The line above each preview is the config that produced it.
+
+![The same data from 100 to 36 columns](docs/previews/responsive.svg)
+
+As the terminal narrows, the least important segments leave first, the two quotas split into two aligned rows that shed the same column together (clock, then projection, then countdown), long names are cut with an ellipsis, and the 7-day quota never leaves.
+
+![The interactive config editor](docs/previews/config.svg)
+
+`bun run config` opens the editor: every key press redraws the real status line above the list. `w` plays the width sweep and `p` the pressure sweep, so you see what a priority or a threshold does before saving it.
+
+## Reading the gauges
+
 ```
-(=ᴥ=)  acme-web ·  main* +12 -3 ·  Opus 4.7 [2]
-󱐋 $3.42 (18m) 🔥 D $95.9 🔥 W $95.9 · cache 41%
-🍉 󰄨 conv 55%⡇  ·  5h 20%⡄ ↺3h22 (03:10)  ·  7d 23%⡄ ↺4d11h (Mon 11:06)
+(◉_◉) acme-web · main* · Opus 4.7 · conv 72%⡟ ↓52k
+🍉 5h 78%⡟ ↺50m (14:50) end 94% · 7d 64%⡏ ↺1d23h (Sat 13:18) end 89%
 ```
 
-In alert mode (context, 5h quota, or 7-day quota above threshold), a 4th line appears with the details and an estimated time-to-limit.
+The conversation gauge sits next to the model it belongs to. The two quotas share one line while it fits. When it does not, each gets its own row and the rows share their columns, so the figures read down as well as across:
+
+```
+🍉 5h 78%⡟ ↺50m   (14:50)     end 94%
+⠀⠀ 7d 64%⡏ ↺1d23h (Sat 13:18) end 89%
+```
+
+- `conv 72% ↓52k`: the conversation is at 72% of the compaction threshold, 52k tokens before Claude Code compacts it. Past the threshold it reads `+272k`, the amount already over.
+- `5h 78%` and `7d 64%`: how much of each rate-limit window is used.
+- `↺50m (14:50)`: the window resets in 50 minutes, at 14:50 local time. Past a day it counts in days and names the weekday.
+- `end 94%`: where the window will stand at its reset if you keep the average pace you have had since it opened. Under 100% you make it to the reset. It turns peach from 85%, and red over 100%, when you will be blocked before the reset.
+- `⚠ limit in 35m`: at the pace of the last minutes the 5h quota runs out before it resets. It appears right after the 5h quota, only when that is the case.
 
 ## Requirements
 
 - **Bun** (runtime, no other one is supported; CI runs the version in `.bun-version`)
 - **A truecolor terminal** (24-bit ANSI), no 256-color fallback, the palette is sent as raw RGB
-- **A patched Nerd Font** installed in the terminal (glyphs `󱐋 󰄨 󰅶 ⑂` etc.)
+- **A patched Nerd Font** installed in the terminal, for the cost and lines-changed icons
 - `git` on `PATH` (optional: without it, the branch segment simply shows `no-git`)
 
 ## Installation
@@ -63,16 +95,17 @@ loss, real cost history is preserved.
 | `ccVersion` | 1 | **off** | Claude Code CLI version, occasionally useful to spot an update, enable as needed |
 | `cost` / `duration` | 2 | always on | cost and duration of the current session, the number that matters most |
 | `linesChanged` | 2 | on, silent if zero | total lines added/removed over the session (`cost.total_lines_added/removed`), distinct from the git diff on line 1 |
+| `projectToday` | 2 | on, silent if it repeats a neighbour | what this project cost today (`P`), between the session and the day: the line zooms out from session to project to day to week |
 | `today` / `week` | 2 | on if cost > 0 | what was actually spent today and over the last 7 calendar days, today included (local SQLite, a session that spans midnight is split between its days) |
 | `burn` | 2 | on if > $10/hr | burn rate, warns you before the bill surprises you |
 | `cache` | 2 | on if < 70% | cache hit rate, below 70%, context is being paid for at full price |
-| `contextGauge` | 3 | on | conversation context pressure **measured against the real compaction threshold** (not the raw window, see below), braille gradient |
-| `fiveHourGauge` / `sevenDayGauge` | 3 | on | 5h and 7-day rate-limit quotas, with countdown and local reset time (`↺3h22 (03:10)`, or `↺4d11h (Mon 11:06)` when the reset is more than a day away) |
+| `contextGauge` | 1 | on | conversation context pressure **measured against the real compaction threshold** (not the raw window, see below), braille gradient |
+| `pace` | 3 | on | `end 94%` after each quota: the projection at the current average pace, peach from 85%, red past 100% |
+| `fiveHourGauge` / `sevenDayGauge` | 3 | on | 5h and 7-day rate-limit quotas, on one line or two aligned rows, with countdown and local reset time (`↺3h22 (03:10)`, or `↺4d11h (Mon 11:06)` when the reset is more than a day away) |
 
 Every optional segment carries a **priority**: under reduced width, the
-lowest-priority segments disappear first, line by line. The line-3 gauges
-first shed their countdowns, then drop one by one; the 7-day quota is the
-last one standing and never disappears. Segments listed as
+lowest-priority segments disappear first, line by line. The two quotas
+have no priority: they never disappear and only shed columns. Segments listed as
 "relocatable" (`worktree`, `vimMode`, `agentName`, `outputStyle`,
 `sessionName`, `ccVersion`, `night`, `linesChanged`) can be sent to line 1
 or line 2 via config, the fixed identity and economy segments
@@ -107,9 +140,12 @@ current behavior unchanged.
   "theme": "watermelon",
 
   "thresholds": {
-    "compactAlert": 85,            // % of the "compaction threshold" window that triggers the alert
-    "fiveHourAlert": 90,           // % of the 5h quota that triggers the alert
-    "sevenDayAlert": 80,           // % of the 7-day quota that triggers the alert
+    // One number per gauge drives everything: the gauge turns red and its glyph
+    // pulses above it, it turns peach 20 points below, and the mood panics
+    // halfway between it and 100.
+    "compactAlert": 85,            // % of the compaction threshold
+    "fiveHourAlert": 90,           // % of the 5h quota
+    "sevenDayAlert": 80,           // % of the 7-day quota
     "compactionReserveRatio": 0.92 // fraction of the window reserved before auto-compact
   },
 
@@ -153,12 +189,25 @@ bun run config
 # or, once the package is linked: ccwatermelon-config
 ```
 
-Plain ANSI text menu with a **live preview**: every change to a
-threshold, a segment or the theme immediately redraws a sample through
-the same `render()` function used in production, on a fictional dataset
-close to a real-world case (cost, context, quotas). Custom colors are
-edited in the file itself. Saves to `~/.config/ccwatermelon/config.jsonc`
-as plain JSON, so comments written in that file by hand are lost on save.
+A full-screen editor with the real status line on top, redrawn at every
+key press through the same `render()` function used in production.
+
+| Key | Effect |
+|---|---|
+| `↑` `↓` | move between the alert thresholds, the theme and the segments |
+| `←` `→` | adjust the threshold, switch theme, or change a segment's priority (`[` `]` move a threshold by 5) |
+| `space` | switch a segment on or off |
+| `l` | send a relocatable segment to the other line |
+| `r` | put the row back to its default |
+| `w` | width demo: the preview narrows to 34 columns and back, so you see what your priorities drop first |
+| `p` | pressure demo: every gauge sweeps from empty to full, so you see where your thresholds change colour and mood |
+| `s` / `q` | save and exit / exit, asking twice when there are unsaved changes |
+
+Each threshold slider shows its three zones (warning, alert, panic) as you
+drag it. Set `NO_MOTION=1` to turn the demos and the slider easing off.
+Custom colors are edited in the file itself. Saves to
+`~/.config/ccwatermelon/config.jsonc` as plain JSON, so comments written
+in that file by hand are lost on save.
 
 ## Security & robustness
 
@@ -216,8 +265,9 @@ Each line is adjusted independently: the lowest-priority optional
 segments disappear one by one until the line fits, or only the core
 remains (identity on line 1, cost+duration on line 2). When the identity
 core itself is too wide, the directory and branch names are cut with an
-ellipsis. The gauge and alert lines first switch to their compact form
-(no countdown, no detail) before dropping anything.
+ellipsis. The two quotas never disappear: when one line is too narrow they
+stack into two rows and drop the same column together, the clock first,
+then the projection, then the countdown.
 
 ## Design rationale
 
@@ -227,11 +277,13 @@ ellipsis. The gauge and alert lines first switch to their compact form
   of eight, and color (sky → peach → red by threshold) carries the rest.
   Constant length, variable information: that's the guiding principle
   behind the whole statusline.
-- **No time-based animation.** The statusline is only redrawn on a Claude
-  Code event (new message, tool call, etc.), never continuously. An
-  animation driven by `Date.now()` would therefore never move between two
-  consecutive renders, or would jump inconsistently depending on event
-  frequency. The render is deliberately deterministic given the same data.
+- **Motion only moves when Claude Code redraws.** The statusline is
+  redrawn on a Claude Code event (new message, tool call), never
+  continuously, so nothing here runs on a timer. Two things advance one
+  step per second of wall clock, and only show when a redraw happens: the
+  glyph of a gauge past its alert threshold alternates between red and pink,
+  which is what catches the eye, and the gradient on a cost past a
+  milestone drifts.
 - **Context is measured against the compaction threshold, not the raw
   window.** `contextGauge` compares tokens used to the real auto-compact
   threshold, not `context_window_size`: the `autoCompactWindow` token
@@ -275,7 +327,7 @@ better: ccstatusline has substantially more widgets and an established
 theme ecosystem; claude-powerline has a more mature responsive layout
 engine (CSS-Grid-style breakpoints, whereas we settle for a per-segment
 priority system); CCometixLine has a config TUI with a live preview
-compiled in Rust, visually more polished than our plain-text ANSI menu.
+compiled in Rust, where ours is a Bun raw-mode screen.
 
 ## Development
 
@@ -284,13 +336,15 @@ bun test                               # full suite
 bun run lint                           # biome, lint + format check
 bun run typecheck                      # strict typecheck
 bun run knip                           # dead code and unused dependencies
-bun run start < fixtures/normal.json   # manual test with a payload
-bun run config                         # config CLI with live preview
+bun run config                         # config editor with live preview
+bun run previews                       # regenerate the animated README previews
 ```
 
 Commits follow Conventional Commits (commitlint on `commit-msg`), and the
 `pre-commit` hook runs the four checks above. CI runs them again on every
-push and pull request.
+pull request and push to `main`, checks that the committed previews match the
+renderer, and on `main` lets semantic-release decide the version and
+publish the GitHub release from the commit history.
 
 Tests isolate everything they touch (`CCWATERMELON_DATA_DIR`,
 `CCWATERMELON_CACHE_DIR`, `CLAUDE_CONFIG_DIR`, `HOME`) in temporary
