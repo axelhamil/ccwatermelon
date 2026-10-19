@@ -2,15 +2,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ConfigFile } from "../src/config/userConfig";
 import { defaultConfig, mergeConfig } from "../src/config/userConfig";
+import { pressureLevel } from "../src/context/pressure";
 import type { EditorKey, EditorState } from "../src/editor/state";
 import { applyKey, previewData } from "../src/editor/state";
 import type { Motion } from "../src/editor/view";
 import { drawEditor } from "../src/editor/view";
-import { isAlerting, pressureLevel } from "../src/quota/pressure";
 import type { StatuslineData } from "../src/statusline/data";
 import { classifyMood } from "../src/statusline/mood";
 import { render } from "../src/statusline/render";
-import { applyPaletteOverrides } from "../src/terminal/format";
 import { visualWidth } from "../src/terminal/width";
 
 process.env.TZ = "UTC";
@@ -21,14 +20,21 @@ const CELL_WIDTH = 8.4;
 const LINE_HEIGHT = 21;
 const FONT_SIZE = 14;
 const PADDING = 18;
-const BACKGROUND = "#121712";
-const CAPTION = "#7d8f78";
-const DEFAULT_INK = "#f4f0e2";
+const BACKGROUND = "#1e1e2e";
+const CAPTION = "#7f849c";
+const DEFAULT_INK = "#cdd6f4";
+const SGR_INKS: Record<string, string> = {
+	"1": "#ffffff",
+	"2": "#7f849c",
+	"31": "#f38ba8",
+	"32": "#a6e3a1",
+	"33": "#f9e2af",
+	"34": "#89b4fa",
+	"35": "#f5c2e7",
+	"36": "#94e2d5",
+};
 const FONT_STACK =
 	"ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace";
-// biome-ignore lint/suspicious/noControlCharactersInRegex: the cost icon may be followed by ANSI colour sequences
-const COST_ICON = /\u{f140b}(\x1b\[[0-9;]*m)* /gu;
-const LINES_ICON = /\u{f0176}/gu;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: splits a line on its ANSI colour sequences
 const SGR = /\x1b\[([0-9;]*)m/g;
 
@@ -57,18 +63,11 @@ function escapeXml(text: string): string {
 	return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
-function withoutNerdFont(line: string): string {
-	return line.replace(COST_ICON, "").replace(LINES_ICON, "±");
-}
-
 function fillOf(sgr: string): string {
-	const [mode, kind, r, g, b] = sgr.split(";");
-
-	return mode === "38" && kind === "2" ? `rgb(${r},${g},${b})` : DEFAULT_INK;
+	return SGR_INKS[sgr] ?? DEFAULT_INK;
 }
 
 function runsOf(line: string): Run[] {
-	const plain = withoutNerdFont(line);
 	const runs: Run[] = [];
 	let fill = DEFAULT_INK;
 	let column = 0;
@@ -98,12 +97,12 @@ function runsOf(line: string): Run[] {
 	};
 
 	let cursor = 0;
-	for (const match of plain.matchAll(SGR)) {
-		for (const ch of plain.slice(cursor, match.index)) place(ch);
+	for (const match of line.matchAll(SGR)) {
+		for (const ch of line.slice(cursor, match.index)) place(ch);
 		fill = fillOf(match[1] ?? "");
 		cursor = match.index + match[0].length;
 	}
-	for (const ch of plain.slice(cursor)) place(ch);
+	for (const ch of line.slice(cursor)) place(ch);
 
 	return runs;
 }
@@ -183,30 +182,18 @@ ${frames.join("\n")}
 }
 
 function resolve(file: ConfigFile) {
-	const config = mergeConfig(defaultConfig(), file);
-	applyPaletteOverrides(config.colors, config.theme);
-
-	return config;
+	return mergeConfig(defaultConfig(), file);
 }
 
-function sessionAt(t: number, nowMs: number): StatuslineData {
+function sessionAt(t: number): StatuslineData {
 	const config = resolve({});
-	const nowSec = Math.floor(nowMs / 1000);
 	const contextPct = Math.round(6 + 92 * t);
-	const fiveHourPct = Math.round(4 + 94 * t ** 1.4);
-	const sevenDayPct = Math.round(38 + 30 * t);
-	const sessionCost = 0.12 + 46 * t ** 2;
-	const levels = [
-		pressureLevel(contextPct, config.thresholds.compactAlert),
-		pressureLevel(fiveHourPct, config.thresholds.fiveHourAlert),
-		pressureLevel(sevenDayPct, config.thresholds.sevenDayAlert),
-	];
-	const [contextLevel = "calm", fiveHourLevel = "calm", sevenDayLevel = "calm"] = levels;
-	const mood = classifyMood({ levels, contextPct, sessionCost, fiveHourPct, sevenDayPct });
+	const contextLevel = pressureLevel(contextPct, config.thresholds.compactAlert);
+	const mood = classifyMood({ contextLevel, contextPct });
 	const contextTokens = Math.round(contextPct * 1840);
 
 	return {
-		...previewData(config, null, nowSec),
+		...previewData(config, null),
 		mood,
 		celebrationMode: mood.kind === "rose",
 		dirName: "acme-web",
@@ -216,30 +203,15 @@ function sessionAt(t: number, nowMs: number): StatuslineData {
 			insertions: Math.round(420 * t),
 			deletions: Math.round(96 * t),
 		},
-		activeSessions: 1,
 		worktree: null,
-		sessionCost,
 		sessionDurationMs: (2 + 170 * t) * 60_000,
-		projectTodayCost: 9.4 + sessionCost,
-		todayCost: 31.2 + sessionCost,
-		weekCost: 268 + sessionCost,
 		linesAdded: Math.round(420 * t),
 		linesRemoved: Math.round(96 * t),
 		contextPct,
 		compactPct: contextPct,
 		compactHeadroom: 184_000 - contextTokens,
 		contextLevel,
-		fiveHourPct,
-		fiveHourLevel,
-		fiveHourProjectedPct: t < 0.15 ? null : Math.round(fiveHourPct * 1.22),
-		sevenDayPct,
-		sevenDayLevel,
-		sevenDayProjectedPct: Math.round(sevenDayPct * 1.5),
-		cacheHitPct: t > 0.55 ? 91 : 97,
-		burnRatePerHr: t > 0.6 ? 11 + 9 * t : null,
-		etaMinutes: isAlerting(fiveHourLevel)
-			? Math.max(0, Math.round((100 - fiveHourPct) * 2.5))
-			: null,
+		cacheHitPct: t > 0.7 ? 58 : 94,
 	};
 }
 
@@ -248,20 +220,20 @@ function sessionScene(): Scene {
 
 	return {
 		name: "session",
-		title: "A session from the first prompt to the limit",
+		title: "A session from the first prompt to the compaction threshold",
 		columns: 96,
 		frameSeconds: 0.9,
 		frames: Array.from({ length: steps }, (_, i) => {
 			const nowMs = START_MS + i * 1000;
 
-			return { lines: render(sessionAt(i / (steps - 1), nowMs), {}, 96, nowMs).split("\n") };
+			return { lines: render(sessionAt(i / (steps - 1)), {}, 96, nowMs).split("\n") };
 		}),
 	};
 }
 
 function responsiveScene(): Scene {
 	const widths = [100, 92, 84, 76, 68, 60, 52, 44, 36, 44, 52, 60, 68, 76, 84, 92];
-	const data = { ...sessionAt(0.62, START_MS), activeSessions: 2 };
+	const data = { ...sessionAt(0.75), worktree: "melon", agentName: "explorer" };
 
 	return {
 		name: "responsive",
@@ -277,58 +249,39 @@ function responsiveScene(): Scene {
 
 const CUSTOM_CONFIGS: { caption: string; file: ConfigFile }[] = [
 	{ caption: "{}", file: {} },
-	{ caption: '{ "theme": "mocha" }', file: { theme: "mocha" } },
 	{
 		caption:
-			'{ "colors": { "green": [255,196,84], "sky": [255,160,90], "lavender": [255,214,150], … } }',
-		file: {
-			colors: {
-				green: [255, 196, 84],
-				teal: [255, 178, 102],
-				sky: [255, 160, 90],
-				lavender: [255, 214, 150],
-				mauve: [255, 122, 89],
-				subtext: [232, 200, 160],
-				dim: [128, 104, 84],
-			},
-		},
+			'{ "segments": { "sessionName": { "enabled": true }, "ccVersion": { "enabled": true } } }',
+		file: { segments: { sessionName: { enabled: true }, ccVersion: { enabled: true } } },
 	},
 	{
 		caption:
-			'{ "segments": { "sessionName": { "enabled": true, "line": 2 }, "ccVersion": { "enabled": true } } }',
-		file: { segments: { sessionName: { enabled: true, line: 2 }, ccVersion: { enabled: true } } },
-	},
-	{
-		caption:
-			'{ "segments": { "today": off, "week": off, "linesChanged": off, "pace": off, "cache": off } }',
+			'{ "segments": { "linesChanged": off, "cache": off, "duration": off, "worktree": off, "effort": off } }',
 		file: {
 			segments: {
-				today: { enabled: false },
-				week: { enabled: false },
-				projectToday: { enabled: false },
 				linesChanged: { enabled: false },
-				pace: { enabled: false },
 				cache: { enabled: false },
-				sessions: { enabled: false },
+				duration: { enabled: false },
 				worktree: { enabled: false },
+				effort: { enabled: false },
 			},
 		},
 	},
 	{
-		caption: '{ "thresholds": { "compactAlert": 60, "sevenDayAlert": 50 } }',
-		file: { thresholds: { compactAlert: 60, sevenDayAlert: 50 } },
+		caption: '{ "thresholds": { "compactAlert": 60 } }',
+		file: { thresholds: { compactAlert: 60 } },
 	},
 ];
 
 function customScene(): Scene {
 	return {
 		name: "custom",
-		title: "One config file, six different status lines",
+		title: "One config file, four different status lines",
 		columns: 104,
 		frameSeconds: 2.4,
 		frames: CUSTOM_CONFIGS.map(({ caption, file }) => {
 			const config = resolve(file);
-			const data = previewData(config, null, Math.floor(START_MS / 1000));
+			const data = previewData(config, null);
 
 			return { caption, lines: render(data, config.segments, 104, START_MS).split("\n") };
 		}),
@@ -344,15 +297,9 @@ const EDITOR_SCRIPT: Beat[] = [
 	"bigLeft",
 	"wait",
 	"down",
-	"down",
-	"bigLeft",
-	"bigLeft",
-	"wait",
-	"down",
 	"right",
 	"wait",
 	"left",
-	"down",
 	"down",
 	"down",
 	"down",

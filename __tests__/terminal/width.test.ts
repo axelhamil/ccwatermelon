@@ -8,7 +8,7 @@ describe("width", () => {
 	});
 
 	test("visualWidth ignores ANSI codes", () => {
-		expect(visualWidth(color("hello", "teal"))).toBe(5);
+		expect(visualWidth(color("hello", "cyan"))).toBe(5);
 	});
 
 	test("visualWidth counts plain ASCII as 1 per char", () => {

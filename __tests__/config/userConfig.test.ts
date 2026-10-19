@@ -41,7 +41,26 @@ describe("loadUserConfig", () => {
 		);
 		const { config } = loadUserConfig(cwd, [join(cwd, ".ccwatermelon.jsonc")]);
 		expect(config.thresholds.compactAlert).toBe(70);
-		expect(config.thresholds.fiveHourAlert).toBe(90);
+		expect(config.thresholds.compactionReserveRatio).toBe(0.92);
+	});
+
+	test("given an old config with a theme, colours, quota alerts and removed segments, then it loads without error and keeps the rest", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "ccstatusline-"));
+		dirs.push(cwd);
+		writeFileSync(
+			join(cwd, ".ccwatermelon.jsonc"),
+			`{
+				"theme": "mocha",
+				"colors": { "green": [1, 2, 3] },
+				"thresholds": { "compactAlert": 70, "fiveHourAlert": 90, "sevenDayAlert": 50 },
+				"segments": { "today": { "enabled": false }, "night": { "enabled": false, "line": 2 } }
+			}`,
+		);
+		const { config, errors } = loadUserConfig(cwd, [join(cwd, ".ccwatermelon.jsonc")]);
+
+		expect(errors).toEqual([]);
+		expect(config.thresholds.compactAlert).toBe(70);
+		expect(config.segments.night?.enabled).toBe(false);
 	});
 
 	test("invalid config falls back to defaults and reports an error, never throws", () => {

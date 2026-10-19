@@ -17,7 +17,6 @@ const SubagentTaskSchema = z.object({
 });
 
 const SubagentPayloadSchema = z.object({
-	cwd: text,
 	columns: z.number().min(1).optional().catch(undefined),
 	tasks: z
 		.array(SubagentTaskSchema.nullable().catch(null))

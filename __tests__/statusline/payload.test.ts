@@ -4,14 +4,13 @@ import { parsePayload } from "../../src/statusline/payload";
 describe("parsePayload", () => {
 	test("given one hostile field, then only that field is dropped", () => {
 		const payload = parsePayload({
-			session_id: "s1",
-			cost: { total_cost_usd: 1e308, total_duration_ms: "12", total_lines_added: 4 },
+			version: "2.1.0",
+			cost: { total_duration_ms: "12", total_lines_added: 4, total_lines_removed: -1 },
 			context_window: { used_percentage: null, context_window_size: -5 },
 		});
 
-		expect(payload?.session_id).toBe("s1");
+		expect(payload?.version).toBe("2.1.0");
 		expect(payload?.cost).toEqual({
-			total_cost_usd: undefined,
 			total_duration_ms: undefined,
 			total_lines_added: 4,
 			total_lines_removed: undefined,

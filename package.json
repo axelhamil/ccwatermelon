@@ -31,7 +31,7 @@
 		"zod": "^4.6.5"
 	},
 	"license": "MIT",
-	"description": "A fast, configurable Claude Code statusline: context, cost history and rate-limit gauges at a glance.",
+	"description": "A fast, configurable Claude Code statusline, companion to Burnrate: identity, context pressure and session at a glance.",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/axelhamil/ccwatermelon.git"

@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { RateLimitsSchema } from "../quota/rateLimits";
 
 const MAX_PLAUSIBLE_COUNT = 1e12;
 
@@ -9,13 +8,11 @@ const text = z.string().optional().catch(undefined);
 const flag = z.boolean().optional().catch(undefined);
 
 const PayloadSchema = z.object({
-	session_id: text,
 	version: text,
 	session_name: text,
 	workspace: z
 		.object({
 			current_dir: text,
-			project_dir: text,
 			git_worktree: text,
 			repo: z.object({ host: text, owner: text, name: text }).optional().catch(undefined),
 		})
@@ -39,10 +36,8 @@ const PayloadSchema = z.object({
 		})
 		.optional()
 		.catch(undefined),
-	rate_limits: RateLimitsSchema,
 	cost: z
 		.object({
-			total_cost_usd: count,
 			total_duration_ms: count,
 			total_lines_added: count,
 			total_lines_removed: count,

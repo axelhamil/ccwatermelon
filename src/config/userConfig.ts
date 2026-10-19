@@ -2,53 +2,30 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import type { Rgb, ThemeName } from "../terminal/format";
 import type { SegmentConfig } from "./segmentConfig";
 
-const RgbTupleSchema = z.tuple([
-	z.number().int().min(0).max(255),
-	z.number().int().min(0).max(255),
-	z.number().int().min(0).max(255),
-]);
+const SegmentConfigSchema = z.object({
+	enabled: z.boolean().optional(),
+	priority: z.number().finite().optional(),
+});
 
-const SegmentConfigSchema = z
-	.object({
-		enabled: z.boolean().optional(),
-		line: z.union([z.literal(1), z.literal(2)]).optional(),
-		priority: z.number().finite().optional(),
-	})
-	.strict();
-
-const ConfigFileSchema = z
-	.object({
-		theme: z.enum(["watermelon", "mocha"]).optional(),
-		thresholds: z
-			.object({
-				compactAlert: z.number().min(0).max(100).optional(),
-				fiveHourAlert: z.number().min(0).max(100).optional(),
-				sevenDayAlert: z.number().min(0).max(100).optional(),
-				compactionReserveRatio: z.number().min(0.1).max(1).optional(),
-			})
-			.strict()
-			.partial()
-			.optional(),
-		colors: z.record(z.string(), RgbTupleSchema).optional(),
-		segments: z.record(z.string(), SegmentConfigSchema).optional(),
-	})
-	.strict()
-	.partial();
+const ConfigFileSchema = z.object({
+	thresholds: z
+		.object({
+			compactAlert: z.number().min(0).max(100).optional(),
+			compactionReserveRatio: z.number().min(0.1).max(1).optional(),
+		})
+		.optional(),
+	segments: z.record(z.string(), SegmentConfigSchema).optional(),
+});
 
 export type ConfigFile = z.infer<typeof ConfigFileSchema>;
 
 export interface ResolvedConfig {
-	theme: ThemeName;
 	thresholds: {
 		compactAlert: number;
-		fiveHourAlert: number;
-		sevenDayAlert: number;
 		compactionReserveRatio: number;
 	};
-	colors: Record<string, Rgb>;
 	segments: SegmentConfig;
 }
 
@@ -58,14 +35,10 @@ export interface LoadResult {
 }
 
 const DEFAULTS: ResolvedConfig = {
-	theme: "watermelon",
 	thresholds: {
 		compactAlert: 85,
-		fiveHourAlert: 90,
-		sevenDayAlert: 80,
 		compactionReserveRatio: 0.92,
 	},
-	colors: {},
 	segments: {},
 };
 
@@ -142,9 +115,7 @@ export function readConfigFile(path: string): { data: ConfigFile | null; error: 
 
 export function mergeConfig(base: ResolvedConfig, override: ConfigFile): ResolvedConfig {
 	return {
-		theme: override.theme ?? base.theme,
 		thresholds: { ...base.thresholds, ...override.thresholds },
-		colors: { ...base.colors, ...override.colors },
 		segments: { ...base.segments, ...override.segments },
 	};
 }

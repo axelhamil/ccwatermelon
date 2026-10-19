@@ -32,11 +32,9 @@ describe("config editor", () => {
 	});
 
 	test("given rows that were never edited, when each is reset, then the state is untouched and stays clean", () => {
-		const onTheme = { ...fresh, cursor: rowOf("theme") };
 		const onSegment = { ...fresh, cursor: rowOf("night") };
 
 		expect(press(fresh, "reset")).toBe(fresh);
-		expect(press(onTheme, "reset")).toBe(onTheme);
 		expect(press(onSegment, "reset")).toBe(onSegment);
 	});
 
@@ -56,13 +54,6 @@ describe("config editor", () => {
 		expect(state.file.thresholds).toEqual({});
 	});
 
-	test("given the theme row, when cycled right twice, then it comes back to the default theme", () => {
-		const onTheme = { ...fresh, cursor: rowOf("theme") };
-
-		expect(press(onTheme, "right").file.theme).toBe("mocha");
-		expect(press(onTheme, "right", "right").file.theme).toBe("watermelon");
-	});
-
 	test("given a segment off by default, when toggled, then it is enabled and flagged as edited", () => {
 		const state = press({ ...fresh, cursor: rowOf("ccVersion") }, "toggle");
 
@@ -72,11 +63,10 @@ describe("config editor", () => {
 		});
 	});
 
-	test("given a fixed segment, when asked to change line, then nothing changes", () => {
-		const onToday = { ...fresh, cursor: rowOf("today") };
+	test("given a toggle without priority, when its priority is changed, then nothing changes", () => {
+		const onMotion = { ...fresh, cursor: rowOf("motion") };
 
-		expect(press(onToday, "line")).toBe(onToday);
-		expect(press({ ...fresh, cursor: rowOf("night") }, "line").file.segments?.night?.line).toBe(2);
+		expect(press(onMotion, "right")).toBe(onMotion);
 	});
 
 	test("given the cursor on the first row, when moved up, then it stays there", () => {
@@ -96,15 +86,15 @@ describe("key chunks", () => {
 });
 
 describe("preview data", () => {
-	test("given a lowered weekly alert, then the sample weekly quota turns critical", () => {
-		const relaxed = previewData(defaultConfig(), null, 1_800_000_000);
+	test("given a lowered context alert, then the sample context turns critical and the mood follows", () => {
+		const relaxed = previewData(defaultConfig(), null);
 		const strict = previewData(
-			mergeConfig(defaultConfig(), { thresholds: { sevenDayAlert: 50 } }),
+			mergeConfig(defaultConfig(), { thresholds: { compactAlert: 60 } }),
 			null,
-			1_800_000_000,
 		);
 
-		expect(relaxed.sevenDayLevel).toBe("warn");
-		expect(strict.sevenDayLevel).toBe("critical");
+		expect(relaxed.contextLevel).toBe("warn");
+		expect(strict.contextLevel).toBe("critical");
+		expect(strict.mood.kind).toBe("stressed");
 	});
 });

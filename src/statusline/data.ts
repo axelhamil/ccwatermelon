@@ -1,5 +1,5 @@
+import type { PressureLevel } from "../context/pressure";
 import type { GitStatus } from "../git/git";
-import type { PressureLevel } from "../quota/pressure";
 import type { Mood } from "./mood";
 
 export type ReviewState = "approved" | "pending" | "changes_requested" | "draft";
@@ -21,34 +21,14 @@ export interface StatuslineData {
 	git: GitStatus;
 	modelName: string;
 	dirName: string;
-	activeSessions: number;
-
-	sessionCost: number;
 	sessionDurationMs: number;
-	projectTodayCost: number;
-	todayCost: number;
-	weekCost: number;
 
 	contextPct: number | null;
 	compactPct: number | null;
 	compactHeadroom: number | null;
 	contextLevel: PressureLevel;
 
-	fiveHourPct: number | null;
-	fiveHourResetsAt: number | null;
-	fiveHourProjectedPct: number | null;
-	fiveHourLevel: PressureLevel;
-
-	sevenDayPct: number | null;
-	sevenDayResetsAt: number | null;
-	sevenDayProjectedPct: number | null;
-	sevenDayLevel: PressureLevel;
-
 	cacheHitPct: number | null;
-
-	burnRatePerHr: number | null;
-	etaMinutes: number | null;
-	etaCooling: boolean;
 
 	celebrationMode: boolean;
 

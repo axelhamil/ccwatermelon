@@ -1,20 +1,14 @@
 import type { ConfigFile } from "../config/userConfig";
 import { defaultConfig, mergeConfig } from "../config/userConfig";
-import type { PressureLevel } from "../quota/pressure";
-import { pressureLevel, pressureZones } from "../quota/pressure";
+import type { PressureLevel } from "../context/pressure";
+import { pressureLevel, pressureZones } from "../context/pressure";
+import { MAX_LINES } from "../statusline/fit";
 import { render } from "../statusline/render";
 import type { ColorName } from "../terminal/format";
-import {
-	applyPaletteOverrides,
-	color,
-	colorRgb,
-	lerpColor,
-	PALETTE,
-	THEMES,
-} from "../terminal/format";
+import { color } from "../terminal/format";
 import { truncateToWidth, visualWidth } from "../terminal/width";
 import type { EditorState, Row, ThresholdKey } from "./state";
-import { previewData, ROWS, segmentView, themeOf, thresholdOf } from "./state";
+import { previewData, ROWS, segmentView, thresholdOf } from "./state";
 
 interface Tween {
 	from: number;
@@ -57,14 +51,13 @@ const INDENT = "  ";
 const SGR_SPLIT_RE = /(\x1b\[[0-9;]*m)/;
 const SECTION_OF: Record<Row["kind"], string> = {
 	threshold: "Alerts",
-	theme: "Look",
 	segment: "Segments",
 };
 const ZONE_TONES: Record<PressureLevel, ColorName> = {
 	calm: "green",
-	warn: "peach",
+	warn: "yellow",
 	critical: "red",
-	panic: "pink",
+	panic: "magenta",
 };
 
 interface Layout {
@@ -76,7 +69,7 @@ interface Layout {
 }
 
 const LAYOUTS: readonly Layout[] = [
-	{ chrome: 12, minRoom: 3, framed: true, spaced: true, preview: true },
+	{ chrome: 11, minRoom: 3, framed: true, spaced: true, preview: true },
 	{ chrome: 6, minRoom: 3, framed: true, spaced: true, preview: false },
 	{ chrome: 3, minRoom: 1, framed: true, spaced: false, preview: false },
 ];
@@ -160,16 +153,12 @@ export function isSaveToastOver(motion: Motion, now: number): boolean {
 }
 
 function sliceRule(width: number): string {
-	const stops = [PALETTE.green, PALETTE.text, PALETTE.red] as const;
+	const third = Math.floor(width / 3);
+	const tones: readonly ColorName[] = ["green", "yellow", "red"];
 
-	return Array.from({ length: width }, (_, i) => {
-		const position = (i / Math.max(1, width - 1)) * (stops.length - 1);
-		const from = Math.min(stops.length - 2, Math.floor(position));
-		const start = stops[from] ?? PALETTE.green;
-		const end = stops[from + 1] ?? PALETTE.red;
-
-		return colorRgb("▁", lerpColor(position - from, start, end));
-	}).join("");
+	return tones
+		.map((tone, index) => color("▁".repeat(index < 2 ? third : width - 2 * third), tone))
+		.join("");
 }
 
 function track(alertAbove: number, cells: number): string {
@@ -177,7 +166,7 @@ function track(alertAbove: number, cells: number): string {
 
 	return Array.from({ length: cells }, (_, cell) =>
 		cell === knobCell
-			? color("●", "text")
+			? color("●", "bold")
 			: color("━", ZONE_TONES[pressureLevel((cell / cells) * 100, alertAbove)]),
 	).join("");
 }
@@ -197,18 +186,9 @@ function thresholdRow(
 	const showsZones = trackRoom - ZONES_WIDTH >= MIN_TRACK_CELLS_WITH_ZONES;
 	const freeCells = showsZones ? trackRoom - ZONES_WIDTH : trackRoom;
 	const cells = Math.max(MIN_TRACK_CELLS, Math.min(MAX_TRACK_CELLS, freeCells));
-	const gauge = `${row.label.padEnd(LABEL_WIDTH)}${track(shown, cells)} ${color(`${value}%`.padStart(4), "text")}`;
+	const gauge = `${row.label.padEnd(LABEL_WIDTH)}${track(shown, cells)} ${`${value}%`.padStart(4)}`;
 
 	return showsZones ? `${gauge}${ZONES_GAP}${color(zones, "dim")}` : gauge;
-}
-
-function themeRow(file: ConfigFile): string {
-	const selected = themeOf(file);
-	const names = Object.keys(THEMES).map((name) =>
-		name === selected ? color(`◆ ${name}`, "text") : color(`◇ ${name}`, "dim"),
-	);
-
-	return `${"theme".padEnd(10)}${names.join("   ")}`;
 }
 
 function segmentRow(
@@ -218,22 +198,18 @@ function segmentRow(
 ): string {
 	const view = segmentView(file, row.spec);
 	const state = view.enabled ? color("on ", "green") : color("off", "dim");
-	const name = `${color(row.spec.id.padEnd(16), view.enabled ? "subtext" : "dim")}${state}`;
-	const line = `line ${view.line}`;
-	const placement = row.spec.priority !== undefined ? `${line}   priority ${view.priority}` : line;
-	const edited = view.edited ? color(" edited", "peach") : "";
-	const candidates = [
-		`${name}   ${color(placement, "dim")}${edited}`,
-		`${name}   ${color(line, "dim")}${edited}`,
-		`${name}${edited}`,
-	];
+	const label = row.spec.id.padEnd(16);
+	const name = `${view.enabled ? label : color(label, "dim")}${state}`;
+	const edited = view.edited ? color(" edited", "yellow") : "";
+	const placement =
+		row.spec.priority === undefined ? "" : `   ${color(`priority ${view.priority}`, "dim")}`;
+	const candidates = [`${name}${placement}${edited}`, `${name}${edited}`];
 
 	return firstFitting(candidates, columns - MARKER_WIDTH);
 }
 
 function rowText(file: ConfigFile, row: Row, motion: Motion, now: number, columns: number): string {
 	if (row.kind === "threshold") return thresholdRow(file, row, motion, now, columns);
-	if (row.kind === "theme") return themeRow(file);
 
 	return segmentRow(file, row, columns);
 }
@@ -263,11 +239,9 @@ function listLines(
 function rowHints(row: Row | undefined): string[] {
 	if (!row) return [];
 	if (row.kind === "threshold") return ["←→ adjust", "[ ] by 5", "r reset"];
-	if (row.kind === "theme") return ["←→ switch", "r reset"];
+	const priority = row.spec.priority === undefined ? [] : ["←→ priority"];
 
-	const relocate = row.spec.relocatable ? ["l line"] : [];
-
-	return ["space on/off", "←→ priority", ...relocate, "r reset"];
+	return ["space on/off", ...priority, "r reset"];
 }
 
 function keyHints(row: Row | undefined, motion: Motion, columns: number): string[] {
@@ -282,7 +256,7 @@ function keyHints(row: Row | undefined, motion: Motion, columns: number): string
 }
 
 function titleLine(configPath: string, columns: number): string {
-	const title = `${INDENT}🍉 ${color("ccwatermelon", "text")}`;
+	const title = `${INDENT}🍉 ${color("ccwatermelon", "bold")}`;
 	const pathRoom = columns - visualWidth(title) - 1;
 	if (pathRoom < MIN_PATH_WIDTH) return title;
 
@@ -325,14 +299,14 @@ function previewLines(
 			? idleWidth
 			: Math.round(idleWidth - (idleWidth - narrowWidth) * thereAndBack(widthT));
 	const pressure = pressureT === null ? null : Math.round(4 + 95 * thereAndBack(pressureT));
-	const data = previewData(resolved, pressure, Math.floor(now / 1000));
+	const data = previewData(resolved, pressure);
 	const rendered = render(data, resolved.segments, width, now).split("\n");
 	const ruler =
 		widthT === null
-			? color(pressure === null ? "" : `every gauge at ${pressure}%`, "dim")
+			? color(pressure === null ? "" : `context at ${pressure}%`, "dim")
 			: color(`${"─".repeat(Math.max(0, width - 9))} ${width} cols`, "dim");
 
-	return [...rendered, "", "", ""].slice(0, 4).concat(ruler);
+	return [...rendered, ...Array<string>(MAX_LINES).fill("")].slice(0, MAX_LINES).concat(ruler);
 }
 
 export function drawEditor(
@@ -342,9 +316,6 @@ export function drawEditor(
 	viewport: Viewport,
 	configPath: string,
 ): string[] {
-	const resolved = mergeConfig(defaultConfig(), state.file);
-	applyPaletteOverrides(resolved.colors, resolved.theme);
-
 	const { columns, rows } = viewport;
 	const width = Math.min(columns, MAX_PREVIEW_WIDTH + INDENT.length);
 	const layout = LAYOUTS.find(({ chrome, minRoom }) => rows >= chrome + minRoom) ?? BARE_LAYOUT;

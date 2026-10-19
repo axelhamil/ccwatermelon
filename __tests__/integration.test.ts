@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 const dataDir = mkdtempSync(join(tmpdir(), "ccwatermelon-data-"));
 const cacheDir = mkdtempSync(join(tmpdir(), "ccwatermelon-cache-"));
@@ -45,25 +45,34 @@ async function runFixture(name: string, width = 120): Promise<string> {
 }
 
 describe("integration", () => {
-	test("normal renders 3 lines (identity, session, quotas)", async () => {
-		const out = await runFixture("normal.json");
-		const lines = out.split("\n").filter((l) => l.trim().length > 0);
-		expect(lines.length).toBe(3);
-		expect(out).toMatch(/\(=ᴥ=\)|\(-ᴥ-\)/);
+	test("given the normal fixture on a wide terminal, then the whole status line fits on one line", async () => {
+		const lines = (await runFixture("normal.json", 160)).trimEnd().split("\n");
+
+		expect(lines).toHaveLength(1);
+		expect(lines[0]).toMatch(/\(=ᴥ=\)|\(-ᴥ-\)/);
 	});
 
-	test("alert-context renders 3 lines", async () => {
+	test("given the alert-context fixture, then the mood is stressed and the output has no cost nor quota", async () => {
 		const out = await runFixture("alert-context.json");
-		const lines = out.split("\n").filter((l) => l.trim().length > 0);
-		expect(lines.length).toBe(3);
+
 		expect(out).toMatch(/\(◉_◉\)|\(-_-\)/);
+		expect(out).not.toContain("$");
+		expect(out).not.toMatch(/\b(5h|7d) /);
 	});
 
-	test("narrow width collapses to a leaner render without crashing", async () => {
-		const out = await runFixture("normal.json", 40);
-		const lines = out.split("\n").filter((l) => l.trim().length > 0);
+	test("given a narrow terminal, then the segments flow over at most 3 lines without an empty one", async () => {
+		const lines = (await runFixture("normal.json", 40)).trimEnd().split("\n");
+
 		expect(lines.length).toBeGreaterThanOrEqual(2);
-		expect(out).toMatch(/\(=ᴥ=\)|\(-ᴥ-\)/);
+		expect(lines.length).toBeLessThanOrEqual(3);
+		for (const line of lines) expect(line.trim()).not.toBe("");
+	});
+
+	test("given a sandboxed render, then nothing is written to the data or cache dirs", async () => {
+		await runFixture("normal.json");
+
+		expect(readdirSync(dataDir)).toEqual([]);
+		expect(readdirSync(cacheDir)).toEqual([]);
 	});
 
 	test("celebration fixture renders the rose mood with a sparkle", async () => {
@@ -73,21 +82,14 @@ describe("integration", () => {
 		expect(out).toContain("✨");
 	});
 
-	test("payload without rate_limits never shows NaN% and still renders", async () => {
-		const out = await runFixture("no-rate-limits.json");
-		expect(out).not.toContain("NaN");
-		const lines = out.split("\n").filter((l) => l.trim().length > 0);
-		expect(lines.length).toBeGreaterThanOrEqual(2);
-	}, 8000);
-
 	test("project-local config disables a segment for the render", async () => {
 		const projectDir = join(homeDir, "project");
 		mkdirSync(projectDir);
 		writeFileSync(
 			join(projectDir, ".ccwatermelon.jsonc"),
 			`{
-				// hide the daily cost for this project
-				"segments": { "today": { "enabled": false } }
+				// hide the session duration for this project
+				"segments": { "duration": { "enabled": false } }
 			}`,
 		);
 		const base = JSON.parse(
@@ -96,7 +98,8 @@ describe("integration", () => {
 		base.workspace.current_dir = projectDir;
 
 		const out = await runPayload(base);
-		expect(out).not.toContain(" D $");
+		expect(out).toContain("conv");
+		expect(out).not.toContain("time");
 	});
 
 	test("given a pull request whose url is not a plain https address, when rendered, then the badge shows without a link", async () => {
@@ -127,18 +130,18 @@ describe("integration", () => {
 		expect(Date.now() - start).toBeLessThan(250);
 	});
 
-	test("given hostile numbers in the payload, then it still renders the full status line", async () => {
+	test("given hostile numbers in the payload, then it still renders the status line", async () => {
 		const out = await runPayload({
 			session_id: "hostile",
 			workspace: { current_dir: homeDir },
 			model: { display_name: "Opus 4.7" },
-			cost: { total_cost_usd: 1e308, total_duration_ms: "soon" },
+			cost: { total_lines_added: 1e308, total_duration_ms: "soon" },
 			context_window: { used_percentage: "half", context_window_size: null },
 		});
 
 		expect(out).toContain("Opus 4.7");
-		expect(out).not.toContain("NaN");
-		expect(out.split("\n").filter((l) => l.trim().length > 0).length).toBeGreaterThanOrEqual(3);
+		expect(out.replace(basename(homeDir), "")).not.toContain("NaN");
+		expect(out.split("\n").filter((l) => l.trim().length > 0).length).toBeGreaterThanOrEqual(1);
 	});
 
 	test("given stdin that is not JSON, then it says so instead of crashing", async () => {

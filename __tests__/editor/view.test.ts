@@ -27,10 +27,6 @@ const plain = (lines: string[]) => lines.map(stripAnsi).join("\n");
 
 const SCENES: Record<string, { state: EditorState; motion: Motion }> = {
 	"cursor on a threshold": { state: fresh, motion: still },
-	"cursor on the theme": {
-		state: { ...fresh, cursor: ROWS.findIndex((row) => row.kind === "theme") },
-		motion: still,
-	},
 	"cursor on an edited segment": {
 		state: {
 			file: { segments: { night: { enabled: false, priority: 12 } } },
@@ -93,21 +89,28 @@ describe("config editor drawing", () => {
 		const state = { ...fresh, file: { thresholds: { compactAlert: 50 } } };
 		const row = draw(state, still, 120).find((line) => line.includes(CURSOR)) ?? "";
 		const calm = color("━", "green").repeat(13);
-		const warn = color("━", "peach").repeat(7);
+		const warn = color("━", "yellow").repeat(7);
 		const critical = color("━", "red").repeat(10);
-		const panic = color("━", "pink").repeat(9);
+		const panic = color("━", "magenta").repeat(9);
 
-		expect(row).toContain(`${calm}${warn}${color("●", "text")}${critical}${panic}`);
+		expect(row).toContain(`${calm}${warn}${color("●", "bold")}${critical}${panic}`);
 		expect(stripAnsi(row)).toContain("warns past 30%, panics past 75%");
 	});
 
-	test("given the cursor on a segment, when drawn, then the line key shows only if that segment can change line", () => {
-		const onMovable = plain(draw({ ...fresh, cursor: segmentRow("night") }, still, 120));
-		const onFixed = plain(draw({ ...fresh, cursor: segmentRow("today") }, still, 120));
+	test("given the cursor on a segment, when drawn, then the priority key shows only if that segment has a priority", () => {
+		const ranked = plain(draw({ ...fresh, cursor: segmentRow("night") }, still, 120));
+		const toggle = plain(draw({ ...fresh, cursor: segmentRow("motion") }, still, 120));
 
-		expect(onMovable).toContain("l line");
-		expect(onFixed).not.toContain("l line");
-		expect(onFixed).toContain("space on/off");
+		expect(ranked).toContain("←→ priority");
+		expect(toggle).not.toContain("←→ priority");
+		expect(toggle).toContain("space on/off");
+	});
+
+	test("given a tall terminal, when drawn, then the preview shows the status line in the 16 terminal colours", () => {
+		const lines = draw(fresh, still, 100, 30);
+
+		expect(lines.join("\n")).not.toContain("38;2;");
+		expect(plain(lines)).toContain("conv 72%");
 	});
 
 	test("given a save with nothing changed, when the toast shows, then it says nothing was written", () => {

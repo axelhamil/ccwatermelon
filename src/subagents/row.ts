@@ -1,5 +1,5 @@
 import type { ColorName } from "../terminal/format";
-import { color, formatDuration, formatTokens } from "../terminal/format";
+import { color, formatDuration, formatTokens, tinted } from "../terminal/format";
 import { sanitizeOptionalLabel } from "../terminal/sanitize";
 import { truncateToWidth, visualWidth } from "../terminal/width";
 import type { SubagentTask } from "./payload";
@@ -21,7 +21,7 @@ const SETTLED_GLYPHS = new Map<string, Glyph>([
 const BRAILLE_BLANK = 0x2800;
 const LEFT_BAR_DOTS = [0x00, 0x40, 0x44, 0x46, 0x47];
 const RIGHT_BAR_DOTS = [0x00, 0x80, 0xa0, 0xb0, 0xb8];
-const SPARK_TONES: readonly ColorName[] = ["dim", "teal", "green", "yellow", "mauve"];
+const SPARK_TONES: readonly ColorName[] = ["dim", "cyan", "cyan", "cyan", "cyan"];
 const SPARK_TOP_LEVEL = 4;
 const SPARK_SAMPLES = 16;
 
@@ -61,17 +61,17 @@ export interface SubagentRow {
 	content: string;
 }
 
-function cell(plain: string, tone: ColorName): Cell {
+function cell(plain: string, tone: ColorName | null): Cell {
 	if (plain.length === 0) return { text: "", width: 0 };
 
-	return { text: color(plain, tone), width: visualWidth(plain) };
+	return { text: tinted(plain, tone), width: visualWidth(plain) };
 }
 
 function statusGlyph(status: string | undefined, nowMs: number): string {
 	if (status === "running") {
 		const frame = Math.floor(nowMs / SPINNER_FRAME_MS) % SPINNER_FRAMES.length;
 
-		return color(SPINNER_FRAMES[frame] ?? UNKNOWN_GLYPH.mark, "pink");
+		return color(SPINNER_FRAMES[frame] ?? UNKNOWN_GLYPH.mark, "cyan");
 	}
 
 	const { mark, tone } = SETTLED_GLYPHS.get(status ?? "") ?? UNKNOWN_GLYPH;
@@ -135,11 +135,11 @@ function toRow(task: SubagentTask, identityCap: number, nowMs: number): Row | nu
 		id: task.id,
 		glyph: statusGlyph(task.status, nowMs),
 		cells: {
-			identity: cell(truncateToWidth(identity, identityCap), "text"),
-			model: cell(model === null ? "" : shortModel(model), "peach"),
-			tokens: cell(tokens, "subtext"),
+			identity: cell(truncateToWidth(identity, identityCap), null),
+			model: cell(model === null ? "" : shortModel(model), "dim"),
+			tokens: cell(tokens, null),
 			spark: sparkline(task.tokenSamples ?? []),
-			elapsed: cell(elapsed, "subtext"),
+			elapsed: cell(elapsed, "dim"),
 		},
 		description: named === null ? "" : (label ?? ""),
 	};

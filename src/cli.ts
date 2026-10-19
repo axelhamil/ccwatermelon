@@ -31,7 +31,6 @@ const EDITOR_KEYS: Record<string, EditorKey> = {
 	"]": "bigRight",
 	"[": "bigLeft",
 	" ": "toggle",
-	l: "line",
 	r: "reset",
 };
 

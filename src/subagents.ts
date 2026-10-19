@@ -1,8 +1,6 @@
-import { loadUserConfig } from "./config/userConfig";
 import type { SubagentPayload } from "./subagents/payload";
 import { parseSubagentPayload } from "./subagents/payload";
 import { renderSubagentRows } from "./subagents/row";
-import { applyPaletteOverrides } from "./terminal/format";
 
 const FALLBACK_COLUMNS = 80;
 const WRONG_STDIN_HINT =
@@ -28,10 +26,6 @@ async function readPayload(): Promise<SubagentPayload | null> {
 async function main(): Promise<void> {
 	const payload = await readPayload();
 	if (!payload) return;
-
-	const { config, errors } = loadUserConfig(payload.cwd ?? process.cwd());
-	for (const error of errors) console.error(`ccwatermelon: config ignored, ${error}`);
-	applyPaletteOverrides(config.colors, config.theme);
 
 	const rows = renderSubagentRows(payload.tasks, payload.columns ?? FALLBACK_COLUMNS, Date.now());
 	for (const row of rows) console.log(JSON.stringify(row));

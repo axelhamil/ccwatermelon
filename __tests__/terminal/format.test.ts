@@ -1,29 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-	applyPaletteOverrides,
-	colorRgb,
-	formatCost,
-	formatDuration,
-	formatPct,
-	formatTokens,
-	gradientText,
-	lerpColor,
-	PALETTE,
-	THEMES,
-} from "../../src/terminal/format";
-import { stripAnsi } from "../../src/terminal/width";
-
-describe("formatCost", () => {
-	test("under $10 shows 2 decimals", () => {
-		expect(formatCost(3.421)).toBe("$3.42");
-	});
-	test("over $10 shows 1 decimal", () => {
-		expect(formatCost(12.8)).toBe("$12.8");
-	});
-	test("zero", () => {
-		expect(formatCost(0)).toBe("$0.00");
-	});
-});
+import { color, formatDuration, formatPct, formatTokens } from "../../src/terminal/format";
 
 describe("formatDuration", () => {
 	test("under 1 min", () => {
@@ -50,77 +26,25 @@ describe("formatTokens", () => {
 });
 
 describe("formatPct", () => {
-	test("rounds", () => {
+	test("given 10 or more, then it rounds to a whole percent", () => {
 		expect(formatPct(71.4)).toBe("71%");
 		expect(formatPct(71.6)).toBe("72%");
 	});
-});
 
-describe("colorRgb", () => {
-	test("wraps text with a literal rgb triple", () => {
-		const result = colorRgb("x", [10, 20, 30]);
-		expect(result).toBe("\x1b[38;2;10;20;30mx\x1b[0m");
-	});
-});
-
-describe("lerpColor", () => {
-	test("t=0 returns first color", () => {
-		expect(lerpColor(0, [0, 0, 0], [255, 255, 255])).toEqual([0, 0, 0]);
-	});
-	test("t=1 returns second color", () => {
-		expect(lerpColor(1, [0, 0, 0], [255, 255, 255])).toEqual([255, 255, 255]);
-	});
-	test("t=0.5 returns midpoint", () => {
-		expect(lerpColor(0.5, [0, 0, 0], [200, 200, 200])).toEqual([100, 100, 100]);
-	});
-	test("clamps out-of-range t", () => {
-		expect(lerpColor(-1, [10, 10, 10], [20, 20, 20])).toEqual([10, 10, 10]);
-		expect(lerpColor(2, [10, 10, 10], [20, 20, 20])).toEqual([20, 20, 20]);
+	test("given less than 10, then it keeps one decimal", () => {
+		expect(formatPct(2.34)).toBe("2.3%");
+		expect(formatPct(5)).toBe("5%");
 	});
 });
 
-describe("gradientText", () => {
-	test("preserves character content once stripped of color", () => {
-		const result = gradientText("$12.50");
-		expect(stripAnsi(result)).toBe("$12.50");
-	});
-	test("keeps literal spaces uncolored", () => {
-		const result = gradientText("a b");
-		expect(result).toContain(" ");
-	});
-	test("colors each non-space character independently", () => {
-		const result = gradientText("ab");
-		// biome-ignore lint/suspicious/noControlCharactersInRegex: matches ANSI color codes
-		const codes = result.match(/\x1b\[[0-9;]*m/g) ?? [];
-		expect(codes.length).toBeGreaterThanOrEqual(4);
-	});
-});
-
-describe("formatCost hardening", () => {
-	test("caps absurd values instead of printing scientific notation", () => {
-		const out = formatCost(1e308);
-		expect(out).not.toContain("e+");
-		expect(out).toBe("$999999+");
+describe("color", () => {
+	test("given a colour name, then the text is wrapped in its basic SGR code so the terminal theme applies", () => {
+		expect(color("x", "dim")).toBe("\x1b[2mx\x1b[0m");
+		expect(color("x", "red")).toBe("\x1b[31mx\x1b[0m");
 	});
 
-	test("never renders a negative cost", () => {
-		expect(formatCost(-42)).toBe("$0.00");
-	});
-
-	test("falls back to zero on NaN", () => {
-		expect(formatCost(Number.NaN)).toBe("$0.00");
-	});
-});
-
-describe("themes", () => {
-	test("given a theme and a user color, when applied, then the user color wins and the rest follows the theme", () => {
-		applyPaletteOverrides({ green: [1, 2, 3] }, "mocha");
-
-		expect(PALETTE.green).toEqual([1, 2, 3]);
-		expect(PALETTE.red).toEqual(THEMES.mocha.red);
-
-		applyPaletteOverrides({});
-		expect(PALETTE.green).toEqual(THEMES.watermelon.green);
+	test("given empty text, then no escape sequence is emitted", () => {
+		expect(color("", "green")).toBe("");
 	});
 });
 

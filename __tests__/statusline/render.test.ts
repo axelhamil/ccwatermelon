@@ -6,32 +6,16 @@ import { color } from "../../src/terminal/format";
 import { stripAnsi, visualWidth } from "../../src/terminal/width";
 
 const base: StatuslineData = {
-	mood: { kind: "zen", face: "(=ᴥ=)~", blink: "(-ᴥ-)~", color: "teal" },
+	mood: { kind: "zen", face: "(=ᴥ=)~", blink: "(-ᴥ-)~", color: "green" },
 	git: { branch: "main", dirty: false, insertions: 0, deletions: 0 },
 	modelName: "Opus 4.7",
 	dirName: "acme-web",
-	activeSessions: 1,
-	sessionCost: 1.23,
 	sessionDurationMs: 300_000,
-	projectTodayCost: 5.0,
-	todayCost: 5.0,
-	weekCost: 20.0,
 	contextPct: 40,
 	compactPct: 40,
 	compactHeadroom: 258000,
 	contextLevel: "calm",
-	fiveHourPct: 20,
-	fiveHourResetsAt: null,
-	fiveHourProjectedPct: null,
-	fiveHourLevel: "calm",
-	sevenDayPct: 23,
-	sevenDayResetsAt: null,
-	sevenDayProjectedPct: null,
-	sevenDayLevel: "calm",
 	cacheHitPct: 85,
-	burnRatePerHr: null,
-	etaMinutes: null,
-	etaCooling: false,
 	celebrationMode: false,
 	sessionName: null,
 	ccVersion: null,
@@ -48,62 +32,151 @@ const base: StatuslineData = {
 	repoUrl: null,
 };
 
-function withWidth(width: number, fn: () => string): string {
-	const previous = process.env.CCWATERMELON_WIDTH;
-	process.env.CCWATERMELON_WIDTH = String(width);
-	try {
-		return fn();
-	} finally {
-		if (previous === undefined) delete process.env.CCWATERMELON_WIDTH;
-		else process.env.CCWATERMELON_WIDTH = previous;
-	}
-}
+const busy: StatuslineData = {
+	...base,
+	git: { branch: "feat/checkout", dirty: true, insertions: 42, deletions: 7 },
+	effort: "high",
+	cacheHitPct: 41,
+	linesAdded: 142,
+	linesRemoved: 38,
+	worktree: "melon",
+	agentName: "explorer",
+	outputStyle: "terse",
+	ccVersion: "2.1.0",
+};
+const everything = { ccVersion: { enabled: true } };
+const plainLines = (out: string) => stripAnsi(out).split("\n");
 
 describe("render", () => {
-	test("shows mood face", () => {
-		expect(render(base, {}, 120, 0)).toContain("(=ᴥ=)~");
+	test("given a wide terminal, when rendered, then mood, project, branch, model and context share one line three spaces apart", () => {
+		expect(plainLines(render(base, {}, 120, 0))).toEqual([
+			"(=ᴥ=)~   acme-web   main   Opus 4.7   conv 40%⡆   time 5m",
+		]);
 	});
 
-	test("shows branch and model", () => {
-		const out = withWidth(120, () => render(base));
-		expect(out).toContain("main");
-		expect(out).toContain("Opus 4.7");
+	test("given any render, then it only uses the 16 terminal colours and dims its labels", () => {
+		const out = render(busy, everything, 160, 0);
+
+		expect(out).not.toContain("38;2;");
+		expect(out).not.toContain("·");
+		expect(out).toContain(`${color("conv", "dim")} ${color("40%", "green")}`);
+		expect(out).toContain(color("41%", "red"));
 	});
 
-	test("shows session cost formatted", () => {
-		const out = withWidth(120, () => render(base));
-		expect(out).toContain("$1.23");
+	test("given a celebration, when rendered, then a sparkle follows the face", () => {
+		expect(stripAnsi(render({ ...base, celebrationMode: true }, {}, 120, 0))).toContain(
+			"(=ᴥ=)~ ✨",
+		);
 	});
 
-	test("context pressure shows a single braille gauge glyph, no sparkline blocks", () => {
-		const out = stripAnsi(withWidth(120, () => render(base)));
-		expect(out).toMatch(/[⠀-⣿]/);
-		expect(out).not.toMatch(/[▁▂▃▄▅▆▇█]/);
-		expect(out).not.toMatch(/[█░]{2,}/);
-	});
+	test("given no context measure yet, when rendered, then the context gauge is left out", () => {
+		const out = stripAnsi(render({ ...base, contextPct: null, compactPct: null }, {}, 120, 0));
 
-	test("five hour reset shows countdown and local clock", () => {
-		const resetsAt = Math.floor(Date.now() / 1000) + 5400;
-		const out = stripAnsi(withWidth(120, () => render({ ...base, fiveHourResetsAt: resetsAt })));
-		expect(out).toContain("↺1h30");
-		expect(out).toMatch(/\(\d{2}:\d{2}\)/);
-	});
-
-	test("session cost past a milestone renders with a moving gradient", () => {
-		const out = withWidth(120, () => render({ ...base, sessionCost: 42 }));
-		expect(stripAnsi(out)).toContain("$42.0");
-		// biome-ignore lint/suspicious/noControlCharactersInRegex: matches ANSI color codes
-		const codes = out.match(/\x1b\[[0-9;]*m/g) ?? [];
-		expect(codes.length).toBeGreaterThan(10);
-	});
-
-	test("celebration mode adds a sparkle", () => {
-		const out = stripAnsi(withWidth(120, () => render({ ...base, celebrationMode: true })));
-		expect(out).toContain("✨");
+		expect(out).not.toContain("conv");
 	});
 });
 
-describe("identity line", () => {
+describe("line flow", () => {
+	test("given a wide terminal, when every segment fits, then the status line is one line", () => {
+		expect(plainLines(render(busy, everything, 200, 0))).toHaveLength(1);
+	});
+
+	test("given a medium terminal, when segments overflow line 1, then they flow onto line 2 in order", () => {
+		const lines = plainLines(render(busy, everything, 100, 0));
+
+		expect(lines).toHaveLength(2);
+		expect(lines[0]).toStartWith("(=ᴥ=)~   acme-web   feat/checkout* +42 -7   Opus 4.7");
+		expect(lines[1]).toContain("worktree melon");
+	});
+
+	test("given a narrow terminal, when segments need more room, then a third line is used", () => {
+		expect(plainLines(render(busy, everything, 60, 0))).toHaveLength(3);
+	});
+
+	test("given fewer segments enabled, when rendered at the same width, then fewer lines are used", () => {
+		const lean = {
+			...everything,
+			effort: { enabled: false },
+			cache: { enabled: false },
+			linesChanged: { enabled: false },
+			worktree: { enabled: false },
+			agentName: { enabled: false },
+			outputStyle: { enabled: false },
+			ccVersion: { enabled: false },
+		};
+
+		expect(plainLines(render(busy, lean, 60, 0))).toHaveLength(2);
+	});
+
+	test("given a very narrow terminal, when 3 lines are not enough, then the lowest priority segments leave first", () => {
+		const out = stripAnsi(render(busy, everything, 44, 0));
+
+		expect(out.split("\n")).toHaveLength(3);
+		expect(out).not.toContain("v2.1.0");
+		expect(out).not.toContain("style terse");
+		expect(out).toContain("cache 41%");
+		expect(out).toContain("conv 40%");
+	});
+
+	test("given a raised priority, when segments must leave, then the raised one stays", () => {
+		const out = stripAnsi(
+			render(busy, { ...everything, ccVersion: { enabled: true, priority: 99 } }, 44, 0),
+		);
+
+		expect(out).toContain("v2.1.0");
+	});
+
+	test("given any width from 20 to 200, then there are 1 to 3 lines, none empty", () => {
+		for (const width of [20, 30, 44, 60, 80, 100, 120, 160, 200]) {
+			const lines = plainLines(render(busy, everything, width, 0));
+
+			expect(lines.length).toBeGreaterThanOrEqual(1);
+			expect(lines.length).toBeLessThanOrEqual(3);
+			for (const line of lines) expect(line.trim()).not.toBe("");
+		}
+	});
+
+	test("given widths from 40 up, then no line is wider than the terminal", () => {
+		for (const width of [40, 60, 80, 120]) {
+			for (const line of plainLines(render(busy, everything, width, 0))) {
+				expect(visualWidth(line)).toBeLessThanOrEqual(width);
+			}
+		}
+	});
+
+	test("given a tiny terminal and a busy branch, when rendered, then the pull request badge and diff give way and every line fits", () => {
+		const crowded: StatuslineData = {
+			...base,
+			modelName: "Claude Opus 4.7 Extended",
+			git: { branch: "feat/checkout", dirty: true, insertions: 14200, deletions: 3800 },
+			pullRequest: {
+				number: 12345,
+				url: "https://example.com/pr/12345",
+				reviewState: "changes_requested",
+			},
+		};
+
+		for (const width of [16, 20, 24, 30]) {
+			for (const line of plainLines(render(crowded, {}, width, 0))) {
+				expect(visualWidth(line)).toBeLessThanOrEqual(width);
+			}
+		}
+	});
+
+	test("given a directory and a branch too long for the terminal, then they are cut with an ellipsis and every line fits", () => {
+		const long = {
+			...base,
+			dirName: "a-very-long-directory-name-that-never-ends-anywhere",
+			git: { ...base.git, branch: "feat/an-equally-endless-branch-name-for-the-test" },
+		};
+		const lines = plainLines(render(long, {}, 40, 0));
+
+		expect(lines.join("\n")).toContain("…");
+		for (const line of lines) expect(visualWidth(line)).toBeLessThanOrEqual(40);
+	});
+});
+
+describe("identity", () => {
 	const reviewed = {
 		...base,
 		effort: "high",
@@ -114,17 +187,16 @@ describe("identity line", () => {
 			reviewState: "changes_requested" as const,
 		},
 	};
-	const identityOf = (out: string) => out.split("\n")[0] ?? "";
 
 	test("given an open pull request, when rendered, then its number and review state follow the branch", () => {
-		const identity = stripAnsi(identityOf(render(reviewed, {}, 120)));
-
-		expect(identity).toContain("main #128 ✗ · Opus 4.7 high");
+		expect(stripAnsi(render(reviewed, {}, 120, 0))).toContain(
+			"main #128 ✗   Opus 4.7   effort high",
+		);
 	});
 
 	test("given a known repository, when rendered, then directory, branch and pull request are links that take no width", () => {
-		const linked = identityOf(render(reviewed, {}, 120));
-		const plain = identityOf(render(reviewed, { links: { enabled: false } }, 120));
+		const linked = render(reviewed, {}, 120, 0);
+		const plain = render(reviewed, { links: { enabled: false } }, 120, 0);
 
 		expect(linked).toContain("\x1b]8;;https://github.com/acme/web\x07");
 		expect(linked).toContain("\x1b]8;;https://github.com/acme/web/tree/main\x07");
@@ -136,181 +208,56 @@ describe("identity line", () => {
 	test("given a branch with characters that mean something in a url, when linked, then they are escaped", () => {
 		const odd = { ...reviewed, git: { ...reviewed.git, branch: "fix/#12 a" } };
 
-		expect(render(odd, {}, 120)).toContain("/tree/fix/%2312%20a\x07");
-	});
-
-	test("given a terminal too narrow for the pull request badge, when rendered, then the badge leaves before names are cut", () => {
-		const core = "(=ᴥ=)~ acme-web · main #128 ✗ · Opus 4.7";
-		const tight = stripAnsi(identityOf(render(reviewed, {}, visualWidth(core) - 1, 0)));
-
-		expect(tight).not.toContain("#128");
-		expect(tight).toContain("acme-web");
-		expect(tight).not.toContain("…");
+		expect(render(odd, {}, 120, 0)).toContain("/tree/fix/%2312%20a\x07");
 	});
 
 	test("given the pull request segment disabled, when rendered, then the badge is gone", () => {
-		const out = render(reviewed, { pullRequest: { enabled: false } }, 120);
-
-		expect(stripAnsi(out)).not.toContain("#128");
+		expect(stripAnsi(render(reviewed, { pullRequest: { enabled: false } }, 120, 0))).not.toContain(
+			"#128",
+		);
 	});
 });
 
-describe("quota rows", () => {
-	const resetsAt = Math.floor(Date.now() / 1000) + 3 * 3600 + 34 * 60;
-	const weekResetsAt = resetsAt + 2 * 86_400;
-	const paced = {
-		...base,
-		fiveHourResetsAt: resetsAt,
-		fiveHourProjectedPct: 31,
-		sevenDayPct: 100,
-		sevenDayResetsAt: weekResetsAt,
-		sevenDayProjectedPct: 104,
-	};
-	const columnOf = (line: string | undefined, mark: string) => (line ?? "").indexOf(mark);
+describe("context gauge", () => {
+	const alerting = { ...base, compactPct: 90, contextLevel: "critical" as const };
 
-	test("given room for both quotas, then they share one line under the identity line carrying the conversation gauge", () => {
-		const lines = stripAnsi(render(paced, {}, 120)).split("\n");
-
-		expect(lines).toHaveLength(3);
-		expect(lines[0]).toContain("conv 40%");
-		expect(lines[2]).toMatch(
-			/^🍉 5h 20%. ↺3h34 \(\d{2}:\d{2}\) end 31% · 7d 100%. ↺2d3h \(\w{3} \d{2}:\d{2}\) end 104%$/u,
-		);
-	});
-
-	test("given quotas too wide for one line, then each gets a row and gauge, countdown, clock and projection line up", () => {
-		const lines = stripAnsi(render(paced, {}, 60)).split("\n");
-
-		expect(lines[2]).toMatch(/5h {2}20%. ↺3h34 \(\d{2}:\d{2}\) +end 31%$/);
-		expect(lines[3]).toMatch(/7d 100%. ↺2d3h \(\w{3} \d{2}:\d{2}\) end 104%$/);
-		for (const mark of ["↺", "(", "%\n"]) {
-			expect(columnOf(`${lines[2]}\n`, mark)).toBe(columnOf(`${lines[3]}\n`, mark));
-		}
-	});
-
-	test("given a narrowing terminal, then both rows shed the same column, clock first, and the weekly quota stays", () => {
-		const withoutClock = stripAnsi(render(paced, {}, 34)).split("\n");
-		const tiny = stripAnsi(render(paced, {}, 14)).split("\n");
-
-		expect(withoutClock[2]).toContain("↺3h34 ");
-		expect(withoutClock[2]).toContain("end 31%");
-		expect(withoutClock[3]).not.toContain("(");
-		expect(tiny[2]).toMatch(/^🍉 5h {2}20%.$/u);
-		expect(tiny[3]).toContain("7d 100%");
-		expect(tiny[3]).not.toContain("↺");
-	});
-
-	test("given the 5h quota about to run out, then the warning sits on its row", () => {
-		const lines = stripAnsi(render({ ...paced, etaMinutes: 35 }, {}, 60)).split("\n");
-
-		expect(lines).toHaveLength(4);
-		expect(lines[2]).toContain("⚠ limit in 35m");
-		expect(lines[3]).not.toContain("limit");
-	});
-
-	test("given no line ever wider than the terminal, then every width from 30 to 120 fits", () => {
-		for (const width of [30, 44, 60, 80, 120]) {
-			const lines = stripAnsi(render({ ...paced, etaMinutes: 35 }, {}, width)).split("\n");
-
-			for (const line of lines.slice(2)) expect(visualWidth(line)).toBeLessThanOrEqual(width);
-		}
-	});
-
-	test("given a directory and a branch too long for the terminal, then they are cut with an ellipsis and the line fits", () => {
-		const identity = withWidth(60, () =>
-			stripAnsi(
-				render({
-					...base,
-					dirName: "a-very-long-directory-name-that-never-ends-anywhere",
-					git: { ...base.git, branch: "feat/an-equally-endless-branch-name-for-the-test" },
-				}),
-			),
-		).split("\n")[0];
-
-		expect(identity).toContain("…");
-		expect(visualWidth(identity ?? "")).toBeLessThanOrEqual(60);
-	});
-
-	test("given context past the compaction threshold, then the conversation gauge says by how much", () => {
-		const identity = stripAnsi(
+	test("given context past the compaction threshold, then the gauge says by how much", () => {
+		const out = stripAnsi(
 			render(
-				{
-					...base,
-					compactPct: 163,
-					contextLevel: "panic",
-					compactHeadroom: -272_000,
-				},
+				{ ...base, compactPct: 163, contextLevel: "panic", compactHeadroom: -272_000 },
 				{},
 				120,
+				0,
 			),
-		).split("\n")[0];
+		);
 
-		expect(identity).toContain("conv 163%");
-		expect(identity).toContain("+272k");
+		expect(out).toContain("conv 163%");
+		expect(out).toContain("+272k");
 	});
 
-	test("given the pace segment disabled, then no projection is shown", () => {
-		const out = render({ ...base, sevenDayProjectedPct: 143 }, { pace: { enabled: false } }, 120);
+	test("given the context in its warning zone, then its value turns yellow", () => {
+		const out = render({ ...base, compactPct: 70, contextLevel: "warn" }, {}, 120, 0);
 
-		expect(stripAnsi(out)).not.toContain("end ");
+		expect(out).toContain(color("70%", "yellow"));
 	});
 
-	test("given a project that is only part of today's spend, then its total sits between session and day", () => {
-		const economy = stripAnsi(
-			render({ ...base, projectTodayCost: 3.5, todayCost: 5, weekCost: 20 }, {}, 120),
-		).split("\n")[1];
+	test("given the context past its alert threshold, then its glyph alternates from one second to the next", () => {
+		const dimmed = color(brailleGauge(90), "dim");
 
-		expect(economy).toContain("$1.23 (5m) · P $3.50 · D $5.00 · W $20.0");
+		expect(render(alerting, {}, 120, 1000)).toContain(dimmed);
+		expect(render(alerting, {}, 120, 2000)).toContain(color(brailleGauge(90), "red"));
 	});
 
-	test("given a project total equal to the day total, then it is not repeated", () => {
-		const economy = stripAnsi(render(base, {}, 120)).split("\n")[1];
-
-		expect(economy).not.toContain("P $");
-	});
-
-	test("given a gauge past its alert threshold, then its glyph alternates colour from one second to the next", () => {
-		const alerting = { ...base, sevenDayLevel: "critical" as const };
-
-		const pulse = color(brailleGauge(alerting.sevenDayPct ?? 0), "pink");
-
-		expect(render(alerting, {}, 120, 1000)).toContain(pulse);
-		expect(render(alerting, {}, 120, 2000)).not.toContain(pulse);
-	});
-
-	test("given the clock advancing, when rendered, then the face blinks one second in five and a lit separator travels", () => {
-		const faces = [0, 1, 2, 3, 4].map((second) => render(base, {}, 120, second * 1000));
-		const lit = color("·", "text");
-		const litAt = (out: string) => out.indexOf(lit);
+	test("given the clock advancing, when rendered, then the face blinks one second in five", () => {
+		const faces = [0, 1, 2, 3, 4].map((second) => stripAnsi(render(base, {}, 120, second * 1000)));
 
 		expect(faces.slice(0, 4).every((out) => out.includes("(=ᴥ=)~"))).toBe(true);
 		expect(faces[4]).toContain("(-ᴥ-)~");
-		expect(litAt(faces[0] ?? "")).toBeGreaterThan(-1);
-		expect(litAt(faces[1] ?? "")).toBeGreaterThan(litAt(faces[0] ?? ""));
 	});
 
 	test("given motion switched off, when the clock advances, then nothing moves", () => {
 		const still = { motion: { enabled: false } };
-		const alerting = { ...base, sevenDayLevel: "critical" as const, burnRatePerHr: 40 };
 
 		expect(render(alerting, still, 120, 1000)).toBe(render(alerting, still, 120, 4000));
-	});
-
-	test("falls back to a placeholder when no quota is known", () => {
-		const out = stripAnsi(
-			render(
-				{ ...base, fiveHourPct: null, sevenDayPct: null, compactPct: null, contextPct: null },
-				{},
-				120,
-			),
-		);
-		expect(out.split("\n")[2]).toContain("quotas unavailable");
-	});
-
-	test("session line no longer carries the quotas", () => {
-		const session = stripAnsi(render(base, {}, 120)).split("\n")[1] ?? "";
-		expect(session).not.toContain("5h");
-		expect(session).not.toContain("conv");
-		expect(session).not.toContain("7d ");
 	});
 });

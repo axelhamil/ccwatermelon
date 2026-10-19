@@ -26,8 +26,8 @@ export function isAlerting(level: PressureLevel): boolean {
 	return level === "critical" || level === "panic";
 }
 
-export function toneOf(level: PressureLevel, calm: ColorName): ColorName {
+export function toneOf(level: PressureLevel): ColorName {
 	if (isAlerting(level)) return "red";
 
-	return level === "warn" ? "peach" : calm;
+	return level === "warn" ? "yellow" : "green";
 }
